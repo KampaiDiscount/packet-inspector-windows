@@ -1,4 +1,40 @@
-# Packet Inspector / Packet Audit 0.1.3 release notes
+# Packet Inspector for Windows 0.1.4+win.1
+
+Release date: 2026-09-16. Git tag: `v0.1.4-win.1`. **Test prerelease.**
+
+The Windows package is a separate fork of the Linux 0.1.4 engine, based on
+upstream commit `575dc2364d20bb7e7e36d96edeaef207c61ff41f`.
+
+- Native Npcap capture and Windows loopback link-layer decoding.
+- Independent Wireshark `dumpcap` ring and the shared stream-aware detection
+  engine, with restricted Windows evidence ACLs.
+- Offline wheel setup, explicit adapter selection, live capture and replay
+  launchers, and a read-only loopback dashboard on port 8766.
+- Clean Ctrl+C shutdown drains workers and exports; forced raw-capture
+  termination is recorded as incomplete.
+- Both `packet-inspector` and `packet-audit` CLI names are available.
+
+Use the attached **[Packet-Inspector-Windows-0.1.4-win1.zip](https://github.com/KampaiDiscount/packet-inspector-windows/releases/download/v0.1.4-win.1/Packet-Inspector-Windows-0.1.4-win1.zip)**
+and [checksum](https://github.com/KampaiDiscount/packet-inspector-windows/releases/download/v0.1.4-win.1/Packet-Inspector-Windows-0.1.4-win1.zip.sha256).
+The deployment ZIP includes the offline wheel, launchers, source, documentation,
+and internal manifest. Automatic GitHub source archives do not include the wheel.
+Python 3.11+ x64, Wireshark/dumpcap, and Npcap must be installed separately.
+
+Recorded validation: 649 tests passed with 10 documented platform/backend skips;
+200 separate synthetic loopback logins produced 200 findings, and both analyzer
+capture and raw-ring replay counted 2,200 packets. Installed launchers, loopback
+viewer, private ACLs, Ctrl+C shutdown, and offline replay were also exercised.
+These are the published 2026-09-16 results, not a physical-adapter or throughput
+qualification. See [WINDOWS-VALIDATION.md](WINDOWS-VALIDATION.md) and
+[VALIDATION-REPORT.md](VALIDATION-REPORT.md) for limits and deployment checks.
+
+See [WINDOWS.md](WINDOWS.md) for installation. The upstream notes below describe
+earlier shared-engine changes; their Linux deployment details are historical
+context rather than Windows installation instructions.
+
+---
+
+# Historical Packet Inspector / Packet Audit 0.1.3 release notes
 
 Release date: 2026-09-16
 

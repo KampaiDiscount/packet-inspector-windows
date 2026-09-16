@@ -13,6 +13,14 @@ license-files = ["LICENSE", "NOTICE.md"]
 authors = [{ name = "Packet Audit contributors" }]
 dependencies = ["pcapy-ng==1.1.0; platform_system != 'Windows'"]
 
+[project.urls]
+Homepage = "https://github.com/KampaiDiscount/packet-inspector-windows"
+Documentation = "https://github.com/KampaiDiscount/packet-inspector-windows/blob/main/WINDOWS.md"
+Repository = "https://github.com/KampaiDiscount/packet-inspector-windows"
+Issues = "https://github.com/KampaiDiscount/packet-inspector-windows/issues"
+Releases = "https://github.com/KampaiDiscount/packet-inspector-windows/releases"
+Changelog = "https://github.com/KampaiDiscount/packet-inspector-windows/blob/main/RELEASE.md"
+
 [project.scripts]
 packet-audit = "packet_audit.cli:main"
 packet-inspector = "packet_audit.cli:main"

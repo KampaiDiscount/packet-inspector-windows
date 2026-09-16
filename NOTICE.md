@@ -19,6 +19,11 @@ capture directories mode `0700`. Do not publish raw authentication material or
 mistake a captured challenge-response for a password, reusable NT hash, verified
 identity, or proof of compromise.
 
+The Windows launcher uses protected Windows ACLs for its evidence directories
+and validates existing destinations through Windows security APIs. Unix mode
+bits and Kali service settings above do not describe the Windows permission
+boundary. See `WINDOWS.md` for Windows evidence and local-dashboard access.
+
 Packet Audit does not configure Ettercap, ARP poisoning, packet forwarding,
 bridging, firewall rules, credential relay, credential use, cracking, lateral
 movement, command-and-control, or persistence. Those activities are outside the
@@ -31,6 +36,8 @@ including:
 
 - Python, from the Python Software Foundation.
 - libpcap, from The Tcpdump Group.
+- Npcap, distributed separately by the Nmap Project for native Windows capture.
+  Review its installation and licensing terms at https://npcap.com/.
 - `pcapy-ng`, maintained as a Python interface to libpcap.
 - Wireshark command-line tools, particularly `dumpcap` and `tshark`, from the
   Wireshark Foundation and contributors.
@@ -39,6 +46,8 @@ including:
 Those components retain their own copyright notices and license terms. Kali and
 Debian packages install the corresponding notices under
 `/usr/share/doc/PACKAGE/copyright`.
+The Windows deployment ZIP does not redistribute Python, Npcap, or Wireshark
+binaries; install these dependencies separately under their own license terms.
 
 PCredz by Laurent Gaffie is an established GPL-licensed credential extraction
 tool and informed the problem comparison that motivated Packet Audit's

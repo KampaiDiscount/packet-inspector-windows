@@ -1,6 +1,9 @@
 include LICENSE
 include NOTICE.md
 include README.md
+include ENGINE.md
+include CONTRIBUTING.md
+include SECURITY.md
 include RELEASE.md
 recursive-include config *.toml
 recursive-include scripts *.sh

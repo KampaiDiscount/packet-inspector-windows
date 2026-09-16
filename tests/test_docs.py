@@ -13,8 +13,8 @@ def read(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
 
 
-def test_readme_documents_safety_and_operational_contract() -> None:
-    readme = read("README.md")
+def test_engine_reference_documents_safety_and_operational_contract() -> None:
+    readme = read("ENGINE.md")
     required = (
         "explicit authorization",
         "Ettercap",
@@ -40,7 +40,7 @@ def test_readme_documents_safety_and_operational_contract() -> None:
         "parser_errors",
     )
     for phrase in required:
-        assert phrase in readme, f"README is missing {phrase!r}"
+        assert phrase in readme, f"Engine reference is missing {phrase!r}"
 
 
 def test_notice_covers_evidence_and_third_party_boundaries() -> None:

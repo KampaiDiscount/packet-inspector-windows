@@ -6,6 +6,21 @@ not replace or remotely modify a Kali installation.
 
 ## First run
 
+Download the attached deployment ZIP from the
+[Windows test release](https://github.com/KampaiDiscount/packet-inspector-windows/releases/tag/v0.1.4-win.1),
+along with its `.zip.sha256` file. GitHub's automatic source archives and a
+Git checkout do not include the wheel expected by `SETUP.cmd`.
+
+From the directory containing both downloaded files, verify the archive before
+extracting it:
+
+```powershell
+$archive = 'Packet-Inspector-Windows-0.1.4-win1.zip'
+$expected = (Get-Content -LiteralPath "$archive.sha256" -Raw).Trim().Split()[0]
+$actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
+if ($actual -ne $expected) { throw 'ZIP checksum mismatch; do not extract or run it.' }
+```
+
 1. Extract the complete ZIP into a local, user-controlled Scripts folder. Do not
    run the launchers from inside the ZIP or a network share.
 2. Install **64-bit Python 3.11 or newer**, **Wireshark with its dumpcap capture
@@ -151,3 +166,22 @@ binaries are not redistributed in this ZIP. Default dumpcap discovery uses the
 Wireshark registry/install directories, not the current directory or PATH.
 For a nonstandard installation, set an absolute `dumpcap_path` in a custom
 configuration and use the engine CLI.
+
+## Building from source
+
+A source checkout is intended for development; the release ZIP is the direct
+installation path. To build a new deployment ZIP on Windows, create an isolated
+development environment with 64-bit Python 3.11+:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install . build 'setuptools>=77' wheel pytest==8.4.2
+.\.venv\Scripts\python.exe -m pytest -o addopts= -q -rs
+.\.venv\Scripts\python.exe tools\build_windows_release.py --output .\release-output
+```
+
+The builder stages allowlisted source files, builds a wheel and source archive,
+and writes the deployment ZIP, its external SHA-256 file, and an internal
+`SHA256SUMS.txt`. It refuses to overwrite an existing deployment ZIP. Building
+and unit tests do not replace the native acceptance checks in
+[WINDOWS-VALIDATION.md](WINDOWS-VALIDATION.md).
