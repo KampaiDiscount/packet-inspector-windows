@@ -10,3 +10,8 @@ recursive-include tools *.py
 include LOGIN_FIELDS.md
 include COVERAGE.md
 include RELIABILITY.md
+include WINDOWS.md
+include WINDOWS-VALIDATION.md
+include VALIDATION-REPORT.md
+include *.cmd
+recursive-include windows *.ps1

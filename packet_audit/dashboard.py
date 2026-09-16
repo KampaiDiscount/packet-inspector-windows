@@ -132,6 +132,11 @@ def read_page(path: Path, cursor: str | None = None, limit: int = 200) -> dict[s
         before = path.lstat()
         if not stat.S_ISREG(before.st_mode):
             raise PermissionError("evidence must be a regular, non-symlink file")
+        if os.name == "nt":
+            from .windows_security import private_acl_error
+            error = private_acl_error(path)
+            if error:
+                raise PermissionError(error)
         fd = os.open(path, flags)
     except FileNotFoundError:
         return {"records": [], "cursor": None, "missing": True, "reset": bool(cursor),
@@ -143,6 +148,10 @@ def read_page(path: Path, cursor: str | None = None, limit: int = 200) -> dict[s
             raise PermissionError("evidence changed while opening")
         if os.name != "nt" and stat.S_IMODE(metadata.st_mode) & 0o077:
             raise PermissionError("evidence file is not owner-private")
+        if os.name == "nt":
+            error = private_acl_error(path, fd=fd)
+            if error:
+                raise PermissionError(error)
         identity = metadata.st_dev, metadata.st_ino
         reset = bool(decoded and (decoded[0] != identity or decoded[1] > metadata.st_size))
         initial = decoded is None or reset
@@ -231,6 +240,11 @@ def create_server(evidence_dir: str | Path, host: str = "127.0.0.1", port: int =
         raise PermissionError("evidence directory must be a real directory")
     if os.name != "nt" and stat.S_IMODE(metadata.st_mode) & 0o077:
         raise PermissionError("evidence directory must be owner-private")
+    if os.name == "nt":
+        from .windows_security import private_acl_error
+        error = private_acl_error(evidence)
+        if error:
+            raise PermissionError(error)
     token = secrets.token_urlsafe(32) if require_token else None
     html = HTML if require_token else (HTML.replace(LOGIN_HTML, "")
                                       .replace('class="badge">Locked', 'class="badge">Connecting')

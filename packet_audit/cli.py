@@ -17,6 +17,7 @@ from .config import AuditConfig
 from .raw_capture import DumpcapRing
 from .supervisor import AuditSupervisor
 from .writer import validate_evidence_paths, verify_export_permissions
+from .platform_tools import find_dumpcap
 
 
 def _common_runtime_options(parser: argparse.ArgumentParser) -> None:
@@ -102,9 +103,10 @@ def _load_config(args: argparse.Namespace) -> AuditConfig:
 
 def _list_pcapy_interfaces() -> tuple[list[str], str | None]:
     try:
-        import pcapy
-    except ImportError as exc:
-        return [], f"pcapy-ng import failed: {exc}"
+        from .capture import _load_pcapy
+        pcapy = _load_pcapy()
+    except (ImportError, RuntimeError, OSError) as exc:
+        return [], f"capture backend unavailable: {exc}"
     try:
         return list(pcapy.findalldevs()), None
     except Exception as exc:
@@ -113,10 +115,11 @@ def _list_pcapy_interfaces() -> tuple[list[str], str | None]:
 
 def list_interfaces() -> int:
     interfaces, error = _list_pcapy_interfaces()
-    result: dict[str, object] = {"pcapy": interfaces}
+    result: dict[str, object] = {"interfaces": interfaces, "pcapy": interfaces,
+                                "engine": "Npcap" if os.name == "nt" else "pcapy-ng"}
     if error:
         result["pcapy_error"] = error
-    dumpcap = shutil.which("dumpcap")
+    dumpcap = find_dumpcap()
     if dumpcap:
         probe = subprocess.run(
             [dumpcap, "-D"], capture_output=True, text=True, timeout=15, check=False
@@ -126,7 +129,7 @@ def list_interfaces() -> int:
     else:
         result["dumpcap_error"] = "dumpcap not found"
     print(json.dumps(result, indent=2))
-    return 0 if interfaces or dumpcap else 1
+    return 0 if interfaces else 1
 
 
 def doctor(config: AuditConfig) -> int:
@@ -134,7 +137,7 @@ def doctor(config: AuditConfig) -> int:
     interfaces, pcapy_error = _list_pcapy_interfaces()
     checks.append(
         {
-            "check": "pcapy-ng",
+            "check": "Npcap" if os.name == "nt" else "pcapy-ng",
             "ok": pcapy_error is None,
             "detail": pcapy_error or f"{len(interfaces)} interfaces listed",
         }

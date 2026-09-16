@@ -12,6 +12,7 @@ from .config import AuditConfig
 from .detectors import SensitiveDetector
 from .models import ParsedPacket, STOP_SENTINEL, WorkerHeartbeat
 from .packets import PacketDecodeError, parse_transport
+from .process_signals import ignore_windows_child_interrupts
 from .reassembly import FragmentReassembler, TCPReassembler
 
 
@@ -53,6 +54,7 @@ def worker_process(
     epoch_namespace: int = 0,
     queued_byte_counter=None,
 ) -> None:
+    ignore_windows_child_interrupts()
     fragments = FragmentReassembler(
         timeout_seconds=config.fragment_idle_seconds,
         max_datagrams=max(1024, config.max_flows_per_worker // 4),

@@ -487,7 +487,10 @@ class AuditSupervisor:
         prepare_private_parent(self.config.output_jsonl)
         prepare_private_parent(self.config.operational_jsonl)
         old_handlers: dict[int, object] = {}
-        for sig in (signal.SIGINT, signal.SIGTERM):
+        stop_signals = [signal.SIGINT, signal.SIGTERM]
+        if os.name == "nt":
+            stop_signals.append(signal.SIGBREAK)
+        for sig in stop_signals:
             try:
                 old_handlers[sig] = signal.signal(sig, self.request_stop)
             except (ValueError, OSError):
@@ -650,9 +653,20 @@ class AuditSupervisor:
                 finally:
                     source.close()
             raw_before_stop = self.raw_ring.status()
-            raw_status = self.raw_ring.stop()
+            raw_stop_event = "raw_capture_stopped"
+            try:
+                raw_status = self.raw_ring.stop()
+            except Exception as exc:
+                # Raw-child cleanup must not prevent worker drain and durable
+                # export finalization. A failed stop is never a complete run.
+                self._mark_incomplete(f"raw capture shutdown failed: {type(exc).__name__}")
+                self._operation("raw_capture_shutdown_error", error=f"{type(exc).__name__}: {exc}")
+                raw_status = raw_before_stop
+                raw_stop_event = "raw_capture_stop_unverified"
+            if getattr(raw_status, "forced_termination", False):
+                self._mark_incomplete("raw capture required forced termination; final ring flush is unverified")
             if self.config.raw_capture_enabled:
-                self._operation("raw_capture_stopped", **asdict(raw_status))
+                self._operation(raw_stop_event, **asdict(raw_status))
                 if not self.offline_path and not raw_before_stop.running:
                     self._mark_incomplete(
                         "independent raw capture ring was not running at shutdown"

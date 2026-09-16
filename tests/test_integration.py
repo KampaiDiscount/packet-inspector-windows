@@ -90,13 +90,15 @@ def test_replay_same_tuple_new_tcp_epoch_is_not_suppressed(tmp_path: Path):
 def test_replay_fails_if_evidence_writer_cannot_acknowledge_startup(tmp_path: Path):
     capture = tmp_path / "empty.pcap"
     write_pcap(capture, [])
+    directory_instead_of_file = tmp_path / "not-a-file"
+    directory_instead_of_file.mkdir()
     config = AuditConfig(
         interface="offline",
         workers=1,
         queue_size=64,
         raw_capture_enabled=False,
         # Opening a directory as the JSONL file must fail inside the spawned writer.
-        output_jsonl=tmp_path,
+        output_jsonl=directory_instead_of_file,
         operational_jsonl=tmp_path / "operations.jsonl",
         heartbeat_seconds=1,
     )

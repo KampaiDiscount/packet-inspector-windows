@@ -14,6 +14,7 @@ import time
 from typing import Any
 
 from .models import Finding, STOP_SENTINEL
+from .process_signals import ignore_windows_child_interrupts
 
 
 def _private_directory_error(path: Path) -> str | None:
@@ -25,6 +26,9 @@ def _private_directory_error(path: Path) -> str | None:
         return "directory does not exist"
     if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
         return "must be a real directory and not a symbolic link"
+    if os.name == "nt":
+        from .windows_security import private_acl_error
+        return private_acl_error(path)
     if os.name != "nt":
         mode = stat.S_IMODE(metadata.st_mode)
         if mode & 0o077:
@@ -42,6 +46,9 @@ def prepare_private_directory(path: str | Path) -> Path:
     """
 
     target = Path(os.path.abspath(os.fspath(path)))
+    if os.name == "nt":
+        from .windows_security import checked_local_path
+        checked_local_path(target)
     missing: list[Path] = []
     cursor = target
     while True:
@@ -57,7 +64,11 @@ def prepare_private_directory(path: str | Path) -> Path:
 
     for directory in reversed(missing):
         try:
-            os.mkdir(directory, 0o700)
+            if os.name == "nt":
+                from .windows_security import create_private_directory
+                create_private_directory(directory)
+            else:
+                os.mkdir(directory, 0o700)
         except FileExistsError:
             # A concurrent creator is acceptable only if it produced the same
             # private, real-directory invariant checked below.
@@ -106,6 +117,11 @@ def _validate_evidence_destination(
         return None, None
     if stat.S_ISLNK(path_metadata.st_mode) or not stat.S_ISREG(path_metadata.st_mode):
         return "existing destination must be a regular file and not a symbolic link", None
+    if os.name == "nt":
+        from .windows_security import private_acl_error
+        error = private_acl_error(path)
+        if error:
+            return error, None
     if os.name != "nt":
         mode = stat.S_IMODE(path_metadata.st_mode)
         if mode != 0o600:
@@ -130,6 +146,10 @@ def _validate_evidence_destination(
         metadata = os.fstat(fd)
         if not stat.S_ISREG(metadata.st_mode):
             return "existing destination must be a regular file", None
+        if os.name == "nt":
+            error = private_acl_error(path, fd=fd)
+            if error:
+                return error, None
         if metadata.st_size and _last_file_byte(fd, metadata.st_size) != b"\n":
             return "existing JSONL has a non-newline partial tail", None
         return None, metadata
@@ -193,6 +213,11 @@ def validate_evidence_paths(
 def _restricted_text_append(path: Path):
     path = Path(path)
     prepare_private_parent(path)
+    if os.name == "nt" and path.exists():
+        from .windows_security import private_acl_error
+        error = private_acl_error(path)
+        if error:
+            raise PermissionError(f"refusing shared evidence file {path}: {error}")
     flags = os.O_APPEND | os.O_CREAT | os.O_RDWR
     if hasattr(os, "O_CLOEXEC"):
         flags |= os.O_CLOEXEC
@@ -205,6 +230,12 @@ def _restricted_text_append(path: Path):
         os.close(fd)
         raise OSError(f"refusing to write sensitive evidence to a non-regular file: {path}")
     metadata = os.fstat(fd)
+    if os.name == "nt":
+        from .windows_security import private_acl_error
+        error = private_acl_error(path, fd=fd)
+        if error:
+            os.close(fd)
+            raise PermissionError(f"refusing shared evidence file {path}: {error}")
     if metadata.st_size and _last_file_byte(fd, metadata.st_size) != b"\n":
         os.close(fd)
         raise OSError(
@@ -287,6 +318,7 @@ def writer_process(
 ) -> None:
     """Drain both queues without deduplicating or suppressing retries."""
 
+    ignore_windows_child_interrupts()
     findings_path = Path(output_jsonl)
     operations_path = Path(operational_jsonl)
 
@@ -410,10 +442,16 @@ def verify_export_permissions(path: str | Path) -> tuple[bool, str]:
         return False, "file does not exist"
     if target.is_symlink() or not target.is_file():
         return False, "path must be a regular file and not a symbolic link"
+    if os.name == "nt":
+        from .windows_security import private_acl_error
+        error = private_acl_error(target)
+        if error:
+            return False, error
     mode = target.stat().st_mode & 0o777
     if os.name != "nt" and mode & 0o077:
         return False, f"permissions are {mode:03o}; expected no group/other access"
     parent_error = _private_directory_error(target.parent)
     if parent_error is not None:
         return False, f"insecure immediate parent {target.parent}: {parent_error}"
-    return True, f"permissions {mode:03o}; immediate parent is private"
+    return True, ("Windows DACL is account/SYSTEM/Administrators-only; immediate parent is private"
+                  if os.name == "nt" else f"permissions {mode:03o}; immediate parent is private")

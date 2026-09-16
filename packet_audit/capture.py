@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import importlib
+import os
 from pathlib import Path
 import struct
 import threading
@@ -40,6 +41,13 @@ class CaptureStats:
 
 
 def _load_pcapy() -> Any:
+    if os.name == "nt":
+        from . import npcap
+        try:
+            npcap.lib_version()
+        except (OSError, RuntimeError) as exc:
+            raise PcapyUnavailable(f"Npcap is unavailable: {exc}") from exc
+        return npcap
     try:
         return importlib.import_module("pcapy")
     except ImportError as exc:
@@ -97,7 +105,7 @@ class _ClassicPcapHandle:
         if header[:4] == b"\x0a\x0d\x0d\x0a":
             self._file.close()
             raise PcapyUnavailable(
-                "pcapng replay requires pcapy-ng (classic pcap is supported without it)"
+                "pcapng replay requires Npcap on Windows or pcapy-ng on Linux (classic pcap needs neither)"
             )
         details = self._MAGIC.get(header[:4])
         if details is None:
@@ -468,7 +476,7 @@ class PcapyOfflineSource(_PcapySource):
         except PcapyUnavailable:
             if bpf:
                 raise PcapyUnavailable(
-                    "offline BPF filtering requires pcapy-ng"
+                    "offline BPF filtering requires Npcap on Windows or pcapy-ng on Linux"
                 ) from None
             handle = _ClassicPcapHandle(capture_path)
         else:

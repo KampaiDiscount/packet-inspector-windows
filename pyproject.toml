@@ -3,18 +3,19 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "packet-audit"
-version = "0.1.4"
+name = "packet-inspector-windows"
+version = "0.1.4+win.1"
 description = "Loss-visible, stream-aware sensitive-information traffic auditor"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "GPL-3.0-or-later"
 license-files = ["LICENSE", "NOTICE.md"]
 authors = [{ name = "Packet Audit contributors" }]
-dependencies = ["pcapy-ng==1.1.0"]
+dependencies = ["pcapy-ng==1.1.0; platform_system != 'Windows'"]
 
 [project.scripts]
 packet-audit = "packet_audit.cli:main"
+packet-inspector = "packet_audit.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

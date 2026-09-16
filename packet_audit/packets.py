@@ -14,7 +14,8 @@ import struct
 from .models import CapturedPacket, ParsedPacket
 
 
-# libpcap data-link type values used by Linux capture paths.
+# libpcap data-link types used by Linux and native Npcap capture paths.
+DLT_NULL = 0
 DLT_EN10MB = 1
 DLT_RAW = 12
 DLT_LINUX_SLL = 113
@@ -47,6 +48,18 @@ def _u16(data: bytes, offset: int) -> int:
 
 def _link_payload(raw: bytes, datalink: int) -> tuple[int, bytes, tuple[int, ...]]:
     """Return ``(ethertype, network_bytes, vlan_ids)`` for supported DLTs."""
+
+    if datalink == DLT_NULL:
+        # Npcap loopback: native-endian family 2 (IPv4) or 24 (IPv6).
+        # Accept either capture-host byte order for offline cross-host replay.
+        if len(raw) < 4:
+            raise PacketDecodeError("short Npcap loopback header")
+        family = int.from_bytes(raw[:4], 'little')
+        if family not in (2, 24):
+            family = int.from_bytes(raw[:4], 'big')
+        if family not in (2, 24):
+            raise PacketDecodeError(f"unsupported loopback address family {family}")
+        return (ETHERTYPE_IPV4 if family == 2 else ETHERTYPE_IPV6), raw[4:], ()
 
     if datalink == DLT_EN10MB:
         if len(raw) < 14:

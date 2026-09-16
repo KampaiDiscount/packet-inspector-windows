@@ -1,4 +1,16 @@
-# Packet Inspector
+# Packet Inspector - Windows fork
+
+This is the **0.1.4+win.1 Windows test release**, branched from the Linux
+0.1.4 engine. Start with [WINDOWS.md](WINDOWS.md), not the Linux installation
+commands below. Native Windows capture uses Npcap, an independent Wireshark
+dumpcap ring, and the existing multiprocessing analysis engine. The package
+includes Windows launchers and a loopback-only dashboard on port 8766.
+See [WINDOWS-VALIDATION.md](WINDOWS-VALIDATION.md) for the actual test boundary.
+
+The following upstream documentation remains applicable to the shared engine;
+its Bash/systemd installation instructions are Linux-only.
+
+## Packet Inspector engine
 
 Packet Inspector uses the Packet Audit engine. The Python package, commands,
 and service names remain `packet-audit` for compatibility with existing installs.
