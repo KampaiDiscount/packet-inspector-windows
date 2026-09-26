@@ -23,6 +23,7 @@ from collections import Counter, OrderedDict, deque
 from dataclasses import dataclass, field, replace
 import base64
 import binascii
+import json
 import re
 import struct
 import time
@@ -84,7 +85,7 @@ _HTTP_BASIC_RE = re.compile(
     rb"(?im)^(Proxy-Authorization|Authorization)\s*:\s*Basic\s+([A-Za-z0-9+/=_-]{4,})[ \t]*\r?\n"
 )
 _HTTP_BEARER_RE = re.compile(
-    rb"(?im)^(Proxy-Authorization|Authorization)\s*:\s*Bearer\s+([^\s\r\n,]{8,})[ \t]*\r?\n"
+    rb"(?im)^(Proxy-Authorization|Authorization)\s*:\s*Bearer\s+([^\s\r\n,]{1,8192})[ \t]*\r?\n"
 )
 _HTTP_DIGEST_RE = re.compile(
     rb"(?im)^(Proxy-Authorization|Authorization)\s*:\s*Digest\s+([^\r\n]{8,8192})\r?\n"
@@ -98,10 +99,18 @@ _FORM_FIELD_RE = re.compile(
 )
 _NTLM_SIGNATURE_RE = re.compile(rb"NTLMSSP\x00([\x02\x03])\x00\x00\x00")
 _COMPLETE_LINE_RE = re.compile(rb"(?m)([^\r\n]{1,8192})\r?\n")
+_JWT_CANDIDATE_RE = re.compile(
+    rb"(?<![A-Za-z0-9_.-])([A-Za-z0-9_-]{3,2048})\.([A-Za-z0-9_-]{3,4096})\.([A-Za-z0-9_-]{0,2048})(?![A-Za-z0-9_.-])"
+)
+_SESSION_COOKIE_NAMES = frozenset({
+    "sid", "session", "sessionid", "sessiontoken", "jsessionid", "phpsessid",
+    "aspsessionid", "aspnetsessionid", "connectsid", "authtoken",
+    "accesstoken", "idtoken", "jwt", "token",
+})
 _GENERIC_SECRET_PATTERNS = (
     (
         "jwt",
-        re.compile(rb"(?<![A-Za-z0-9_-])(eyJ[A-Za-z0-9_-]{8,})\.(eyJ[A-Za-z0-9_-]{8,})\.([A-Za-z0-9_-]{8,})(?![A-Za-z0-9_-])"),
+        _JWT_CANDIDATE_RE,
         "jwt",
         "high",
     ),
@@ -317,6 +326,40 @@ def _b64decode(raw: bytes, *, max_output: int = 1 << 20) -> bytes | None:
     except (binascii.Error, ValueError):
         return None
     return decoded if len(decoded) <= max_output else None
+
+
+def _jwt_shape(match: re.Match[bytes]) -> str | None:
+    """Identify bounded signed or unsigned compact JWT structure, not validity."""
+
+    header = _b64decode(match.group(1), max_output=2048)
+    payload = _b64decode(match.group(2), max_output=4096)
+    signature_raw = match.group(3)
+    signature = _b64decode(signature_raw, max_output=1536) if signature_raw else b""
+    if header is None or payload is None or signature is None:
+        return None
+    try:
+        header_json = json.loads(header)
+        payload_json = json.loads(payload)
+    except (ValueError, UnicodeError, RecursionError):
+        return None
+    if not isinstance(header_json, dict) or not isinstance(payload_json, dict):
+        return None
+    algorithm = header_json.get("alg")
+    if not isinstance(algorithm, str) or not algorithm:
+        return None
+    if algorithm.lower() == "none":
+        return "unsigned" if not signature_raw else None
+    return "signed" if signature and len(signature_raw) >= 8 else None
+
+
+def _session_cookie_name(name: str) -> bool:
+    lowered = name.lower().strip()
+    for prefix in ("__host-", "__secure-"):
+        if lowered.startswith(prefix):
+            lowered = lowered[len(prefix):]
+            break
+    compact = lowered.replace("-", "").replace("_", "").replace(".", "")
+    return compact in _SESSION_COOKIE_NAMES or compact.endswith("sessiontoken")
 
 
 def _parse_auth_params(raw: bytes) -> dict[str, str]:
@@ -1788,6 +1831,8 @@ class SensitiveDetector:
                 return True
             if _GENERIC_NAMED_GATE_RE.search(probe) is not None:
                 return True
+            if b"." in probe and _JWT_CANDIDATE_RE.search(probe) is not None:
+                return True
             if self.sensitive_fields != _SENSITIVE_FIELDS:
                 return any(name.encode("utf-8", "ignore") in probe for name in self.sensitive_fields)
             return False
@@ -2608,18 +2653,23 @@ class SensitiveDetector:
                 if "=" in part:
                     key, value = part.split("=", 1)
                     pairs.append({"name": key.strip(), "value": value.strip()})
+            session_hint = any(_session_cookie_name(pair["name"]) for pair in pairs)
             finding = self._emit(
                 ctx,
                 state,
                 detector="http_cookie",
                 start=match.start(2),
                 end=match.end(2),
-                category="session",
+                category="session" if session_hint else "cookie",
                 protocol="http",
                 material_type="set_cookie" if match.group(1).lower().startswith(b"set") else "cookie",
                 material={"raw": raw, "pairs": pairs},
-                confidence="high",
-                limitations=["Cookie sensitivity depends on application semantics."],
+                confidence="medium",
+                limitations=[
+                    "Cookie name suggests a session token; application semantics and validity were not tested."
+                    if session_hint else
+                    "Cookie observed; sensitivity and session role were not established."
+                ],
             )
             if finding:
                 findings.append(finding)
@@ -3493,6 +3543,9 @@ class SensitiveDetector:
         pending = False
         for detector, regex, material_type, confidence in _GENERIC_SECRET_PATTERNS:
             for match in regex.finditer(data):
+                jwt_shape = _jwt_shape(match) if material_type == "jwt" else None
+                if material_type == "jwt" and jwt_shape is None:
+                    continue
                 if not self._has_observed_match_boundary(ctx, data, match.end()):
                     pending = True
                     continue
@@ -3507,8 +3560,14 @@ class SensitiveDetector:
                     protocol="generic",
                     material_type=material_type,
                     material=raw.decode("latin-1"),
-                    confidence=confidence,
-                    limitations=["Pattern match; issuer validity and current usability were not tested."],
+                    confidence="medium" if jwt_shape == "unsigned" else confidence,
+                    limitations=[
+                        "Unsigned compact JWT candidate observed; issuer and current usability were not verified."
+                        if jwt_shape == "unsigned" else
+                        "Signed compact JWT structure observed; signature, issuer and current usability were not verified."
+                        if jwt_shape == "signed" else
+                        "Pattern match; issuer validity and current usability were not tested."
+                    ],
                 )
                 if finding:
                     findings.append(finding)

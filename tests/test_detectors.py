@@ -372,6 +372,87 @@ def test_http_authorization_scheme_is_not_a_generic_secret() -> None:
     ]
 
 
+def test_short_explicit_http_bearer_is_a_credential() -> None:
+    request = (
+        b"GET / HTTP/1.1\r\nHost: synthetic.invalid\r\n"
+        b"Authorization: Bearer abc123\r\n\r\n"
+    )
+    findings = SensitiveDetector("session").process_stream(
+        chunk(request, target_flow=flow(40000, 8080))
+    )
+    bearer = by_type(findings, "bearer_token")
+    assert len(bearer) == 1
+    assert bearer[0].material == "abc123"
+    assert bearer[0].protocol == "http"
+    assert bearer[0].confidence == "confirmed"
+
+    overlong = request.replace(b"abc123", b"x" * 8193)
+    assert not by_type(SensitiveDetector("session").process_stream(chunk(overlong)), "bearer_token")
+
+
+def test_cookie_observation_does_not_claim_preference_is_a_session() -> None:
+    request = (
+        b"GET / HTTP/1.1\r\nHost: synthetic.invalid\r\n"
+        b"Cookie: theme=dark\r\n\r\n"
+    )
+    ordinary = by_type(SensitiveDetector("session").process_stream(chunk(request)), "cookie")
+    assert len(ordinary) == 1
+    assert ordinary[0].material["pairs"] == [{"name": "theme", "value": "dark"}]
+    assert ordinary[0].category == "cookie"
+    assert ordinary[0].confidence == "medium"
+
+    session_request = request.replace(b"theme=dark", b"__Host-session=synthetic-value")
+    session = by_type(SensitiveDetector("session").process_stream(chunk(session_request)), "cookie")
+    assert len(session) == 1
+    assert session[0].category == "session"
+    assert session[0].confidence == "medium"
+    assert "not tested" in session[0].limitations[0]
+
+
+def test_jwt_requires_bounded_json_structure_and_accepts_whitespace() -> None:
+    def compact(header: bytes, payload: bytes) -> bytes:
+        def encode(value: bytes) -> bytes:
+            return base64.urlsafe_b64encode(value).rstrip(b"=")
+
+        return encode(header) + b"." + encode(payload) + b"." + encode(b"synthetic-signature-bytes")
+
+    valid = compact(b' {"alg":"HS256"}', b'{"sub":"synthetic-user"}')
+    unsigned = (
+        base64.urlsafe_b64encode(b'{"alg":"none"}').rstrip(b"=") + b"."
+        + base64.urlsafe_b64encode(b'{"sub":"synthetic-user"}').rstrip(b"=") + b"."
+    )
+    invalid_header = compact(b'{"missing":"alg"}', b'{"sub":"synthetic-user"}')
+    invalid_payload = compact(b'{"alg":"HS256"}', b'not-json')
+    unsupported_alg = compact(b'{"alg":"none"}', b'{"sub":"synthetic-user"}')
+    array_payload = compact(b'{"alg":"HS256"}', b'[]')
+    oversized_header = compact(b'{"alg":"HS256","padding":"' + b"x" * 3000 + b'"}', b'{}')
+    jwe_like = valid + b".extra.segment"
+    for candidate in (invalid_header, invalid_payload, unsupported_alg, array_payload, oversized_header, jwe_like):
+        request = b"GET / HTTP/1.1\r\nX-Test: " + candidate + b"\r\n\r\n"
+        assert not by_type(SensitiveDetector("session").process_stream(chunk(request)), "jwt")
+
+    request = b"GET / HTTP/1.1\r\nX-Test: " + valid + b"\r\n\r\n"
+    detector = SensitiveDetector("session")
+    split = request.index(valid) + len(valid) // 2
+    assert not by_type(detector.process_stream(chunk(request[:split], packet_id=1)), "jwt")
+    findings = detector.process_stream(chunk(request[split:], offset=split, packet_id=2))
+    jwt = by_type(findings, "jwt")
+    assert len(jwt) == 1
+    assert jwt[0].material == valid.decode("ascii")
+    assert jwt[0].confidence == "high"
+    assert "not verified" in jwt[0].limitations[0]
+
+    unsigned_request = b"GET / HTTP/1.1\r\nX-Test: " + unsigned + b"\r\n\r\n"
+    unsigned_findings = by_type(SensitiveDetector("session").process_stream(chunk(unsigned_request)), "jwt")
+    assert len(unsigned_findings) == 1
+    assert unsigned_findings[0].material == unsigned.decode("ascii")
+    assert unsigned_findings[0].confidence == "medium"
+    assert "Unsigned" in unsigned_findings[0].limitations[0]
+
+    standalone = SensitiveDetector("session").process_stream(chunk(b"Observed: " + valid + b"\n"))
+    assert len(by_type(standalone, "jwt")) == 1
+
+
 def test_http_text_line_keeps_short_secret_with_http_context() -> None:
     body = b"login: synthetic-user\npassword: x\n"
     request = (
