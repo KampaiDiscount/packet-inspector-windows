@@ -3,7 +3,7 @@
 Candidate checked on 2026-09-26 with 64-bit Python 3.12.14 and Npcap 1.88.
 The 0.1.5+win.1 source and extracted deployment ZIP passed these checks:
 
-- **663 passed, 9 skipped, 28 subtests passed** in the complete Windows suite.
+- **670 passed, 9 skipped, 28 subtests passed** in the complete Windows suite.
   The skipped tests require Linux/POSIX behavior rather than Windows Npcap.
 - Native Npcap offline filtering retained untagged IPv4/IPv6, single- and
   double-tag Ethernet IP using 802.1Q, 802.1ad, 0x9100 and 0x9200, plus

@@ -7,7 +7,7 @@ physical-adapter interception or real client credentials.
 
 | Check | Result |
 | --- | --- |
-| Full unit/integration/regression suite | 663 passed, 9 skipped, 28 subtests passed |
+| Full unit/integration/regression suite | 670 passed, 9 skipped, 28 subtests passed |
 | Native Npcap default BPF | Untagged IPv4/IPv6, single/double VLAN-tagged Ethernet IP and Windows loopback IPv4/IPv6 retained |
 | Direct native loopback capture | 12/12 synthetic logins; 132 analyzer packets and 132 raw-ring packets; complete verdict and private evidence ACL |
 | Deployment ZIP integrity and setup | External SHA-256 plus all 89 internal entries verified; one wheel and source archive; fresh offline wheel install loaded 0.1.5+win.1 from its package-local environment |

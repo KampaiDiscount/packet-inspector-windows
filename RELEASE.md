@@ -1,7 +1,7 @@
 # Packet Inspector for Windows 0.1.5+win.1
 
-Release candidate prepared 2026-09-26 for Git tag `v0.1.5-win.1`. Shared-engine
-changes align with Linux 0.1.5 commit `a69fdcf62502d602dd67c1016bb359c2687ec8a4`.
+Release candidate prepared 2026-09-26 for Git tag `v0.1.5-win.1`. The shared-engine
+baseline came from Linux 0.1.5 commit `a69fdcf62502d602dd67c1016bb359c2687ec8a4`.
 **Test prerelease.** The deployment ZIP and checksum must be attached to that
 release; GitHub's automatic source archives do not contain the offline wheel.
 
@@ -23,7 +23,13 @@ Windows launcher inherits the engine default while preserving an explicit
 custom filter. Native capture on each intended adapter remains a deployment
 qualification step.
 
-The complete Windows suite passed with 663 tests and 28 subtests; 9
+Verified HTTP form data no longer receives terminal-protocol labels, bare
+name/value candidates no longer claim HTTP without a start line, and an
+authentication scheme word alone is not reported as a secret. Short text-body
+login fields remain visible as HTTP candidates. Acknowledged one-byte TCP
+keepalives no longer inflate overlap-conflict counters.
+
+The complete Windows suite passed with 670 tests and 28 subtests; 9
 platform/backend checks were skipped. Native Npcap 1.88 replay accepted
 untagged, single-tag and stacked-tag Ethernet IP, and loopback IPv4/IPv6.
 The extracted ZIP installed its bundled wheel offline; its launcher captured
