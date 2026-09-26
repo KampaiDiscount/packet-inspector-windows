@@ -321,6 +321,9 @@ def parse_transport(packet: ParsedPacket) -> ParsedPacket:
             return replace(packet, truncated=True, transport_parsed=False)
         return replace(
             packet,
+            # Fragment assembly is complete here. Do not retain a second
+            # copy of the unfragmented TCP payload after transport parsing.
+            network_payload=b"",
             sport=_u16(payload, 0),
             dport=_u16(payload, 2),
             tcp_seq=struct.unpack_from("!I", payload, 4)[0],
@@ -343,6 +346,7 @@ def parse_transport(packet: ParsedPacket) -> ParsedPacket:
             udp_end = min(len(payload), udp_length)
         return replace(
             packet,
+            network_payload=b"",
             sport=_u16(payload, 0),
             dport=_u16(payload, 2),
             transport_payload=payload[8:udp_end],

@@ -165,6 +165,14 @@ _HTTP_BYTE_RANGE_SPEC_RE = re.compile(rb"[0-9]*-[0-9]*")
 _HTTP_GATE_RE = re.compile(
     rb"(?i)(?:authorization|authenticate|cookie|set-cookie|\b(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|CONNECT|TRACE)\s|(?:password|passwd|pwd|pass|token|api[_-]?key|secret|session|sid)=)"
 )
+# Every alternative in _HTTP_GATE_RE contains one of these literals. A C-level
+# literal search avoids running the case-insensitive regex on every binary body
+# segment, while still letting the regex decide whether syntax is valid.
+_HTTP_GATE_LITERALS = (
+    b"auth", b"cookie", b"get", b"post", b"put", b"patch", b"delete",
+    b"head", b"options", b"connect", b"trace", b"pass", b"pwd",
+    b"token", b"api", b"secret", b"session", b"sid",
+)
 _HTTP_START_LINE_RE = re.compile(
     rb"(?m)^(?:(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|CONNECT|TRACE) [^\r\n ]{1,8192} HTTP/1\.[01]|HTTP/1\.[01] [1-5][0-9]{2}(?: [^\r\n]{0,256})?)\r?\n"
 )
@@ -1868,6 +1876,9 @@ class SensitiveDetector:
             if state.http_pending.get(ctx.direction, False):
                 return True
             start, end = self._scanner_range(ctx, state, scanner_name, 256)
+            probe = bytes(ctx.data[start:end]).lower()
+            if not any(token in probe for token in _HTTP_GATE_LITERALS):
+                return False
             return _HTTP_GATE_RE.search(ctx.data, start, end) is not None
         if scanner_name == "_scan_line_protocols":
             if (
@@ -3376,6 +3387,12 @@ class SensitiveDetector:
         # its first 64 bytes: pipelined/repeated binds can start much later.
         for match in re.finditer(b"\x30", data):
             start = match.start()
+            # A supported BER outer sequence has a 1..5-byte length header,
+            # so its first child tag (LDAP message ID, 0x02) must be at one
+            # of these offsets. This cheap necessary check skips almost all
+            # random 0x30 bytes before the recursive TLV parser runs.
+            if data.find(b"\x02", start + 2, min(len(data), start + 7)) < 0:
+                continue
             outer = _tlv(data, start)
             if outer is None:
                 continue

@@ -108,6 +108,26 @@ def captured(raw: bytes, datalink: int, *, packet_id: int = 1) -> CapturedPacket
 
 
 class PacketParsingTests(unittest.TestCase):
+    def test_queue_ready_packets_keep_only_one_unfragmented_payload_copy(self) -> None:
+        for protocol, transport in (
+            (6, tcp_segment(b"burst-payload")),
+            (17, udp_datagram(b"burst-payload")),
+        ):
+            with self.subTest(protocol=protocol):
+                frame = ethernet(ipv4(transport, protocol=protocol))
+                parsed = parse_packet_strict(captured(frame, DLT_EN10MB))
+                self.assertIsNotNone(parsed)
+                self.assertEqual(parsed.transport_payload, b"burst-payload")
+                self.assertEqual(parsed.network_payload, b"")
+
+        fragment = ethernet(
+            ipv4(tcp_segment(b"fragment-payload"), more_fragments=True)
+        )
+        parsed_fragment = parse_packet_strict(captured(fragment, DLT_EN10MB))
+        self.assertIsNotNone(parsed_fragment)
+        self.assertFalse(parsed_fragment.transport_parsed)
+        self.assertEqual(parsed_fragment.network_payload, tcp_segment(b"fragment-payload"))
+
     def test_live_source_configures_pcapy_and_batches(self) -> None:
         frame = ethernet(ipv4(tcp_segment(b"batch")))
 

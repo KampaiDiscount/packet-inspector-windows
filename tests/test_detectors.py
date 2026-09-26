@@ -5,7 +5,7 @@ import random
 
 import pytest
 
-from packet_audit.detectors import SensitiveDetector
+from packet_audit.detectors import SensitiveDetector, _HTTP_GATE_LITERALS, _HTTP_GATE_RE
 from packet_audit.models import FlowKey, ParsedPacket, ProvenanceSpan, StreamChunk
 
 
@@ -19,6 +19,21 @@ def flow(sport: int = 40000, dport: int = 80, protocol: int = 6) -> FlowKey:
         interface="eth0",
     )
     return value
+
+
+def test_http_literal_prefilter_covers_every_regex_alternative() -> None:
+    # Keep the cheap prefilter a strict superset if the regex gains a new
+    # signature, so it cannot hide HTTP authentication observations.
+    examples = (
+        b"Authorization: Basic", b"WWW-Authenticate: NTLM", b"Cookie: x=y",
+        b"Set-Cookie: x=y", b"GET /", b"POST /", b"PUT /", b"PATCH /",
+        b"DELETE /", b"HEAD /", b"OPTIONS /", b"CONNECT /", b"TRACE /",
+        b"password=x", b"passwd=x", b"pwd=x", b"pass=x", b"token=x",
+        b"api_key=x", b"api-key=x", b"secret=x", b"session=x", b"sid=x",
+    )
+    for example in examples:
+        assert _HTTP_GATE_RE.search(example) is not None
+        assert any(token in example.lower() for token in _HTTP_GATE_LITERALS)
 
 
 def chunk(
@@ -977,6 +992,22 @@ def test_ldap_simple_bind_and_snmp_communities() -> None:
     bind = by_type(findings, "ldap_simple_bind_credentials")[0]
     assert bind.material["bind_dn"] == "cn=auditor,dc=lab"
     assert bind.material["password"] == "ldap-secret"
+    # Signature-based detection on a nonstandard port must survive the
+    # fast prefilter used for unrelated binary transfer bodies.
+    unusual_port = SensitiveDetector("session").process_stream(
+        chunk(ldap, target_flow=flow(40000, 8888))
+    )
+    assert by_type(unusual_port, "ldap_simple_bind_credentials")[0].material["password"] == "ldap-secret"
+    long_form = der(
+        0x30,
+        der_int(8) + der(
+            0x60, der_int(3) + der(0x04, b"cn=" + b"a" * 140) + der(0x80, b"secret")
+        ),
+    )
+    long_form_findings = SensitiveDetector("session").process_stream(
+        chunk(long_form, target_flow=flow(40000, 8888))
+    )
+    assert by_type(long_form_findings, "ldap_simple_bind_credentials")[0].material["password"] == "secret"
 
     snmp = der(0x30, der_int(1) + der(0x04, b"private-community") + der(0xA0, b""))
     findings = detector.process_datagram(datagram(snmp, dport=161, packet_id=55))
