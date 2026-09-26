@@ -294,6 +294,42 @@ def test_tcp_consumed_conflicting_retransmission_is_visible_with_new_suffix() ->
     assert reassembler.retransmitted_bytes == 6
 
 
+def test_tcp_acknowledged_one_byte_keepalives_do_not_report_conflicts() -> None:
+    reassembler = TCPReassembler()
+    assert reassembler.process(tcp_packet(1, b"", 100, flags=0x02)) == []
+    first = reassembler.process(tcp_packet(2, b"abc", 101))
+    assert [chunk.data for chunk in first] == [b"abc"]
+
+    acknowledgment = tcp_packet(3, b"", 500, flags=0x10, reverse=True)
+    acknowledgment.tcp_ack = 104
+    assert reassembler.process(acknowledgment) == []
+
+    for packet_id in (4, 5, 6):
+        assert reassembler.process(tcp_packet(packet_id, b"X", 103, flags=0x10)) == []
+    assert reassembler.overlap_conflicts == 0
+    assert reassembler.retransmitted_bytes == 0
+
+    next_data = reassembler.process(tcp_packet(7, b"def", 104))
+    assert [chunk.data for chunk in next_data] == [b"def"]
+    assert next_data[0].stream_offset == 3
+
+
+def test_tcp_unacknowledged_or_longer_conflicting_retransmissions_stay_visible() -> None:
+    reassembler = TCPReassembler()
+    assert reassembler.process(tcp_packet(1, b"", 100, flags=0x02)) == []
+    reassembler.process(tcp_packet(2, b"abc", 101))
+
+    # Without peer confirmation, one changed byte is not a proven keepalive.
+    assert reassembler.process(tcp_packet(3, b"X", 103, flags=0x10)) == []
+    assert reassembler.overlap_conflicts == 1
+
+    acknowledgment = tcp_packet(4, b"", 500, flags=0x10, reverse=True)
+    acknowledgment.tcp_ack = 104
+    reassembler.process(acknowledgment)
+    assert reassembler.process(tcp_packet(5, b"XY", 102, flags=0x10)) == []
+    assert reassembler.overlap_conflicts == 2
+
+
 def test_tcp_consumed_history_is_strictly_bounded() -> None:
     reassembler = TCPReassembler(consumed_history_bytes=4)
     syn = tcp_packet(1, b"", 100, flags=0x02)

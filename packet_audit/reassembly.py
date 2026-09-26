@@ -403,6 +403,7 @@ class _DirectionState:
     pending_bytes: int = 0
     consumed_history_start: int | None = None
     consumed_history: bytearray = field(default_factory=bytearray)
+    peer_acked_seq: int | None = None
     last_seen_ns: int = 0
     closed: bool = False
 
@@ -825,6 +826,13 @@ class TCPReassembler:
         directional = state.directions[direction]
         directional.last_seen_ns = max(directional.last_seen_ns, packet.timestamp_ns)
 
+        if ack:
+            opposite = state.directions[1 - direction]
+            if opposite.next_seq is not None:
+                peer_ack = _unwrap_sequence(packet.tcp_ack, opposite.next_seq)
+                if opposite.peer_acked_seq is None or peer_ack > opposite.peer_acked_seq:
+                    opposite.peer_acked_seq = peer_ack
+
         raw_payload_sequence = (packet.tcp_seq + (1 if syn else 0)) & 0xFFFFFFFF
         if directional.next_seq is None:
             if syn:
@@ -842,6 +850,19 @@ class TCPReassembler:
         if payload and directional.next_seq is not None:
             start = _unwrap_sequence(raw_payload_sequence, directional.next_seq)
             end = start + len(payload)
+            if (
+                len(payload) == 1
+                and ack
+                and not packet.tcp_flags & (_TCP_SYN | _TCP_FIN | _TCP_RST)
+                and start == directional.next_seq - 1
+                and directional.peer_acked_seq is not None
+                and directional.peer_acked_seq >= directional.next_seq
+            ):
+                # RFC 9293 permits an idle TCP keepalive at SND.NXT-1 with
+                # one garbage octet. The peer has already acknowledged this
+                # byte, so it cannot replace application data or create an
+                # actual conflicting retransmission.
+                return chunks
             if (
                 start < directional.next_seq
                 and self._conflicts_with_consumed(directional, start, payload)
