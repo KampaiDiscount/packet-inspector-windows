@@ -32,7 +32,7 @@ from uuid import uuid4
 
 from .models import Finding, FlowKey, ParsedPacket, ProvenanceSpan, StreamChunk
 from .http_forms import HTTPFramer, Message as HTTPMessage, field_role, form_fields, json_fields
-from .ntlm_wrappers import smb2_session_for_token, unwrap_ntlm
+from .ntlm_wrappers import smb2_header_seen, smb2_session_for_token, unwrap_ntlm
 from .cleartext import scan_redis, scan_postgres, scan_postgres_authentication
 
 
@@ -249,6 +249,8 @@ class _FlowState:
     ntlm_correlation_bytes: int = 0
     ntlm_pair_highwater: dict[int | tuple[int, int], int] = field(default_factory=dict)
     smb2_seen: bool = False
+    ntlm_zero_session_ambiguous: bool = False
+    ntlm_zero_session_last_type3_ns: int = 0
     cleartext_cursors: dict[int, int] = field(default_factory=dict)
     cleartext_blocked: set[int] = field(default_factory=set)
     postgres_method: int | None = None
@@ -2116,6 +2118,8 @@ class SensitiveDetector:
         if encoded_value is not None:
             material["encoded"] = encoded_value
 
+        zero_session_ambiguous = smb_session == 0 and state.ntlm_zero_session_ambiguous
+
         if message_type == 2:
             challenge: bytes = values["challenge"]
             material["challenge_hex"] = challenge.hex()
@@ -2135,8 +2139,12 @@ class SensitiveDetector:
             if finding:
                 findings.append(finding)
                 if not correlation_allowed:
-                    finding.limitations.append("SMB2 session framing is unavailable; challenge was not correlated.")
-                    self._stats["coverage_ntlm_session_unavailable"] += 1
+                    if zero_session_ambiguous:
+                        finding.limitations.append("Multiple zero-ID SMB2 challenges make correlation ambiguous.")
+                        self._stats["coverage_ntlm_zero_session_ambiguous"] += 1
+                    else:
+                        finding.limitations.append("SMB2 session framing is unavailable; challenge was not correlated.")
+                        self._stats["coverage_ntlm_session_unavailable"] += 1
             if not correlation_allowed:
                 return findings
             key = (ctx.direction, smb_session) if smb_session is not None else ctx.direction
@@ -2197,8 +2205,12 @@ class SensitiveDetector:
         if finding:
             findings.append(finding)
             if not correlation_allowed:
-                finding.limitations.append("SMB2 session framing is unavailable; response was not correlated.")
-                self._stats["coverage_ntlm_session_unavailable"] += 1
+                if zero_session_ambiguous:
+                    finding.limitations.append("Multiple zero-ID SMB2 challenges make correlation ambiguous.")
+                    self._stats["coverage_ntlm_zero_session_ambiguous"] += 1
+                else:
+                    finding.limitations.append("SMB2 session framing is unavailable; response was not correlated.")
+                    self._stats["coverage_ntlm_session_unavailable"] += 1
         if not correlation_allowed:
             return findings
         has_challenge = any(
@@ -2311,7 +2323,7 @@ class SensitiveDetector:
                 "lm_response_hex": response.lm_response.hex(),
                 "nt_response_hex": nt.hex(),
             },
-            confidence="confirmed",
+            confidence="high" if response.smb_session == 0 else "confirmed",
             fields={
                 "challenge_stream_offset": challenge.offset,
                 "response_stream_offset": response.offset,
@@ -2320,6 +2332,8 @@ class SensitiveDetector:
             limitations=[
                 "Challenge-response material does not demonstrate authentication success.",
                 "This is not a plaintext password or a reusable NT hash.",
+                *(["SMB2 SessionId is zero; association uses the sole unresolved challenge in this TCP connection."]
+                  if response.smb_session == 0 else []),
             ],
             identity_suffix=pair,
             emission_scope=(response.smb_session,),
@@ -2340,11 +2354,22 @@ class SensitiveDetector:
             retained = state.directions.get(ctx.direction)
             smb_session = None
             if retained is not None and ctx.base_offset is not None:
-                if _ports(ctx.flow) & {139, 445} and b"\xfeSMB" in retained.data:
+                if _ports(ctx.flow) & {139, 445} and smb2_header_seen(retained.data):
                     state.smb2_seen = True
                 position = ctx.base_offset + match.start() - retained.base_offset
                 if 0 <= position < len(retained.data):
                     smb_session = smb2_session_for_token(retained.data, position, length)
+            if smb_session == 0 and _kind == 2:
+                prior = state.ntlm_challenges.get((ctx.direction, 0))
+                if (
+                    prior is not None
+                    and prior.challenge != _values["challenge"]
+                    and (
+                        prior.timestamp_ns >= state.ntlm_zero_session_last_type3_ns
+                        or ctx.observed_timestamp_ns <= state.ntlm_zero_session_last_type3_ns
+                    )
+                ):
+                    state.ntlm_zero_session_ambiguous = True
             findings.extend(
                 self._handle_ntlm_blob(
                     ctx,
@@ -2354,9 +2379,16 @@ class SensitiveDetector:
                     match.start() + length,
                     detector="raw_ntlmssp",
                     smb_session=smb_session,
-                    correlation_allowed=not state.smb2_seen or smb_session is not None,
+                    correlation_allowed=(not state.smb2_seen or smb_session is not None)
+                    and not (smb_session == 0 and state.ntlm_zero_session_ambiguous),
                 )
             )
+            if smb_session == 0 and _kind == 3 and not state.ntlm_zero_session_ambiguous:
+                prior = state.ntlm_challenges.get((1 - ctx.direction, 0))
+                if prior is not None and prior.timestamp_ns <= ctx.observed_timestamp_ns:
+                    state.ntlm_zero_session_last_type3_ns = max(
+                        state.ntlm_zero_session_last_type3_ns, ctx.observed_timestamp_ns
+                    )
         state.ntlm_pending[ctx.direction] = pending
         return findings
 

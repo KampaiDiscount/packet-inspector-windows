@@ -93,6 +93,17 @@ def test_generated_toml_roundtrips_every_config_field(tmp_path, offline):
     assert not config.output_jsonl.exists()  # Configuration creation is not capture.
 
 
+def test_windows_launcher_inherits_vlan_aware_default_filter(tmp_path):
+    from packet_audit.config import DEFAULT_BPF
+
+    config, _ = app.new_run_config(tmp_path / 'runs', interface=DEVICES[0])
+    assert config.bpf == DEFAULT_BPF
+    source = (Path(app.__file__).resolve().parents[1] / 'windows' / 'Packet-Inspector.ps1').read_text()
+    assert "$PSBoundParameters.ContainsKey('Bpf')" in source
+    assert '$runtimeArguments+="--filter=$Bpf"' in source
+    assert "[string]$Bpf='ip or ip6'" not in source
+
+
 def test_multiple_runs_in_one_second_never_share_evidence(tmp_path, monkeypatch):
     instant = datetime(2026, 9, 16, 12, 0, tzinfo=timezone.utc)
     monkeypatch.setattr(app, 'datetime', SimpleNamespace(now=lambda _zone: instant))

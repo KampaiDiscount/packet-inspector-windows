@@ -1,6 +1,6 @@
 [capture]
 interface = "eth0"
-bpf = "ip or ip6"
+bpf = "ip or ip6 or link[12:2] = 0x8100 or link[12:2] = 0x88a8 or link[12:2] = 0x9100 or link[12:2] = 0x9200 or link[14:2] = 0x8100 or link[14:2] = 0x88a8 or link[14:2] = 0x9100 or link[14:2] = 0x9200 or link[0:2] = 0x8100 or link[0:2] = 0x88a8 or link[0:2] = 0x9100 or link[0:2] = 0x9200"
 workers = 4
 queue_size = 64
 max_worker_queue_bytes = 67108864

@@ -63,6 +63,24 @@ def unwrap_ntlm(token: bytes) -> bytes | None:
     return found
 
 
+def smb2_header_seen(data: bytes | bytearray) -> bool:
+    """Recognize an SMB2 header, including when capture begins mid-record.
+
+    A bare signature can occur inside unrelated data, so it cannot by itself
+    disable unscoped NTLM correlation for the rest of a TCP connection.
+    """
+    cursor = data.find(b"\xfeSMB")
+    while cursor >= 0:
+        if (
+            cursor + 64 <= len(data)
+            and data[cursor + 4:cursor + 6] == b"\x40\x00"
+            and int.from_bytes(data[cursor + 12:cursor + 14], "little") <= 18
+        ):
+            return True
+        cursor = data.find(b"\xfeSMB", cursor + 4)
+    return False
+
+
 def smb2_session_for_token(data: bytes | bytearray, token_start: int, token_length: int = 12) -> int | None:
     """Find a validated enclosing SMB2 SESSION_SETUP security buffer.
 
@@ -97,6 +115,8 @@ def smb2_session_for_token(data: bytes | bytearray, token_start: int, token_leng
         frame_length = int.from_bytes(data[header - 3:header], "big")
         if frame_length < offset + length or data[header + 20:header + 24] != bytes(4):
             continue
-        session = int.from_bytes(data[header + 40:header + 48], "little")
-        return session if session else None
+        # Some responder implementations use zero throughout the exchange.
+        # Zero means a framed token with no assigned session, not missing
+        # framing; the caller handles its weaker correlation scope.
+        return int.from_bytes(data[header + 40:header + 48], "little")
     return None

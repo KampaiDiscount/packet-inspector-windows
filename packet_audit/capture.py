@@ -16,13 +16,8 @@ import threading
 from typing import Any, Iterator
 from uuid import uuid4
 
-from .config import AuditConfig
+from .config import AuditConfig, DEFAULT_BPF
 from .models import CapturedPacket
-
-
-# Capturing all IP traffic is deliberate: a transport-only filter loses
-# non-initial IP fragments before reassembly ever sees them.
-DEFAULT_BPF = "ip or ip6"
 
 
 class CaptureError(RuntimeError):

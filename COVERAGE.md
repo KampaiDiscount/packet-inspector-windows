@@ -31,6 +31,14 @@ implemented/qualified here. These are potential additions, not advertised
 coverage. Protocols on nonstandard ports need a dedicated test before relying
 on the port-gated detectors.
 
+The default capture filter admits IPv4/IPv6 and recognized outer VLAN tags
+(802.1Q, 802.1ad, 0x9100 and 0x9200) on Ethernet and Linux cooked links. The
+decoder then checks up to eight stacked tags and processes only inner IP. The
+filter deliberately includes non-IP traffic inside those VLANs, which the
+decoder discards; qualify the resulting capture load on the target host.
+Physical-adapter VLAN delivery on Windows also depends on the Npcap driver and
+network adapter; validate with traffic from the intended capture interface.
+
 ## Correlation and bounds
 
 SMB2 session scoping validates the enclosing SESSION_SETUP security-buffer

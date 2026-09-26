@@ -406,15 +406,25 @@ class AuditSupervisor:
         batch_bytes = sum(max(0, int(packet.captured_length)) for packet in packets)
         counter = self.worker_queue_byte_counters[shard]
         peak = self.worker_queue_byte_peaks[shard]
-        with counter.get_lock():
-            next_bytes = int(counter.value) + batch_bytes
-            if next_bytes > self.config.max_worker_queue_bytes:
-                reserved = False
-            else:
-                counter.value = next_bytes
-                with peak.get_lock():
-                    peak.value = max(int(peak.value), next_bytes)
-                reserved = True
+        while True:
+            with counter.get_lock():
+                next_bytes = int(counter.value) + batch_bytes
+                if next_bytes > self.config.max_worker_queue_bytes:
+                    reserved = False
+                else:
+                    counter.value = next_bytes
+                    with peak.get_lock():
+                        peak.value = max(int(peak.value), next_bytes)
+                    reserved = True
+            if reserved or not self.offline_path or batch_bytes > self.config.max_worker_queue_bytes:
+                break
+            # Offline input can pause without losing packets at the NIC. Wait
+            # for a worker to release its reservation, checking child health
+            # so a failed worker cannot leave replay stuck forever.
+            self._check_children()
+            if self.stop_requested:
+                raise AuditRuntimeError("offline replay stopped while waiting for worker capacity")
+            time.sleep(0.05)
         if not reserved:
             self.userspace_queue_drops += len(packets)
             self.worker_queue_byte_budget_dropped_packets += len(packets)
@@ -436,7 +446,19 @@ class AuditSupervisor:
             )
             return
         try:
-            self.worker_queues[shard].put_nowait((packets, batch_bytes))
+            if self.offline_path:
+                while True:
+                    try:
+                        self.worker_queues[shard].put((packets, batch_bytes), timeout=0.25)
+                        break
+                    except queue.Full:
+                        self._check_children()
+                        if self.stop_requested:
+                            raise AuditRuntimeError(
+                                "offline replay stopped while waiting for worker queue"
+                            )
+            else:
+                self.worker_queues[shard].put_nowait((packets, batch_bytes))
             self.dispatched_packets += len(packets)
         except queue.Full:
             with counter.get_lock():

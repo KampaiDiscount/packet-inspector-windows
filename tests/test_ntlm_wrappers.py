@@ -84,6 +84,69 @@ def test_smb_scoping_requires_a_valid_security_buffer_and_transport_header():
 
 
 @pytest.mark.parametrize("width", [1, 7, 4096])
+def test_zero_session_smb2_responder_exchange_is_correlated(width):
+    """A Responder-style server can leave SessionId zero through Type 3."""
+    detector = SensitiveDetector("synthetic-zero-smb-session")
+    target = flow(dport=445)
+    challenge = smb2(ntlm_type2(b"TESTONLY"), 0, response=True)
+    position = challenge.index(b"NTLMSSP\x00")
+    assert smb2_session_for_token(challenge, position) == 0
+    _, packet_id = feed(detector, challenge, target, direction=1, width=width)
+    response = smb2(
+        ntlm_type3(nt_response=b"P" * 16 + b"\x01\x01\x00\x00" + b"B" * 28),
+        0,
+    )
+    findings, _ = feed(detector, response, target, packet_id=packet_id, width=width)
+    pairs = by_type(findings, "netntlmv2")
+    assert len(pairs) == 1
+    assert pairs[0].material["smb_session_id"] == 0
+    assert pairs[0].confidence == "high"
+    assert detector.stats().get("coverage_ntlm_session_unavailable", 0) == 0
+
+
+def test_competing_zero_session_challenges_are_not_guessed():
+    detector = SensitiveDetector("synthetic-overlapping-zero-sessions")
+    target = flow(dport=445)
+    challenges = (smb2(ntlm_type2(b"FIRSTONE"), 0, response=True)
+                  + smb2(ntlm_type2(b"SECOND__"), 0, response=True))
+    _, packet_id = feed(detector, challenges, target, direction=1)
+    response = smb2(ntlm_type3(nt_response=b"N" * 24), 0)
+    findings, _ = feed(detector, response, target, packet_id=packet_id)
+    assert by_type(findings, "ntlm_type3_response")
+    assert not by_type(findings, "netntlmv1")
+    assert detector.stats()["coverage_ntlm_zero_session_ambiguous"] >= 1
+
+
+def test_sequential_zero_session_challenges_can_pair():
+    detector = SensitiveDetector("synthetic-sequential-zero-sessions")
+    target = flow(dport=445)
+    packet_id = 1
+    server_offset = client_offset = 0
+    for value in (b"FIRSTONE", b"SECOND__"):
+        challenge = smb2(ntlm_type2(value), 0, response=True)
+        response = smb2(ntlm_type3(nt_response=b"N" * 24), 0)
+        _, packet_id = feed(detector, challenge, target, direction=1,
+                            offset=server_offset, packet_id=packet_id)
+        findings, packet_id = feed(detector, response, target,
+                                   offset=client_offset, packet_id=packet_id)
+        pairs = by_type(findings, "netntlmv1")
+        assert len(pairs) == 1
+        assert pairs[0].material["challenge_hex"] == value.hex()
+        server_offset += len(challenge)
+        client_offset += len(response)
+
+
+def test_smb_signature_without_a_header_does_not_disable_unscoped_ntlm():
+    detector = SensitiveDetector("synthetic-smb-decoy")
+    target = flow(dport=445)
+    _, packet_id = feed(detector, b"decoy-\xfeSMB-" + ntlm_type2(b"TESTONLY"),
+                        target, direction=1)
+    findings, _ = feed(detector, ntlm_type3(nt_response=b"N" * 24),
+                       target, packet_id=packet_id)
+    assert len(by_type(findings, "netntlmv1")) == 1
+
+
+@pytest.mark.parametrize("width", [1, 7, 4096])
 def test_http_spnego_challenge_response_and_retries(width):
     detector = SensitiveDetector("synthetic-spnego")
     target = flow(dport=80)

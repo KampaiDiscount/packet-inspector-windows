@@ -117,6 +117,63 @@ def test_dispatch_queue_full_releases_reserved_bytes(tmp_path: Path):
     assert supervisor.worker_queue_byte_budget_dropped_packets == 0
 
 
+def test_offline_replay_waits_for_worker_queue_capacity(tmp_path: Path):
+    class TemporarilyFullQueue:
+        def __init__(self):
+            self.calls = 0
+            self.item = None
+
+        def put(self, item, timeout):
+            assert timeout > 0
+            self.calls += 1
+            if self.calls == 1:
+                raise queue.Full
+            self.item = item
+
+    config = AuditConfig(
+        workers=1,
+        raw_capture_enabled=False,
+        output_jsonl=tmp_path / "findings.jsonl",
+        operational_jsonl=tmp_path / "operations.jsonl",
+    )
+    supervisor = AuditSupervisor(config, offline_path=tmp_path / "input.pcap")
+    supervisor._check_children = lambda: None
+    temporary = TemporarilyFullQueue()
+    supervisor.worker_queues[0] = temporary
+
+    supervisor._dispatch_batch(0, [_fragment(4)])
+
+    assert temporary.calls == 2
+    assert supervisor.dispatched_packets == 1
+    assert supervisor.userspace_queue_drops == 0
+    assert supervisor.worker_queue_byte_counters[0].value == 100
+
+
+def test_offline_replay_waits_for_worker_byte_budget(tmp_path: Path):
+    config = AuditConfig(
+        workers=1,
+        raw_capture_enabled=False,
+        output_jsonl=tmp_path / "findings.jsonl",
+        operational_jsonl=tmp_path / "operations.jsonl",
+        max_worker_queue_bytes=1024 * 1024,
+    )
+    supervisor = AuditSupervisor(config, offline_path=tmp_path / "input.pcap")
+    with supervisor.worker_queue_byte_counters[0].get_lock():
+        supervisor.worker_queue_byte_counters[0].value = config.max_worker_queue_bytes - 50
+
+    def worker_released_bytes():
+        with supervisor.worker_queue_byte_counters[0].get_lock():
+            supervisor.worker_queue_byte_counters[0].value = 0
+
+    supervisor._check_children = worker_released_bytes
+    supervisor._dispatch_batch(0, [_fragment(5)])
+
+    assert supervisor.dispatched_packets == 1
+    assert supervisor.userspace_queue_drops == 0
+    assert supervisor.worker_queue_byte_budget_dropped_packets == 0
+    assert supervisor.worker_queue_byte_counters[0].value == 100
+
+
 def test_worker_fatal_path_releases_dequeued_batch_reservation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):

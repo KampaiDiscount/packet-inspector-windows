@@ -46,6 +46,20 @@ def _u16(data: bytes, offset: int) -> int:
     return struct.unpack_from("!H", data, offset)[0]
 
 
+def _strip_vlan_tags(raw: bytes, ether_type: int, offset: int) -> tuple[int, bytes, tuple[int, ...]]:
+    vlans: list[int] = []
+    while ether_type in VLAN_ETHERTYPES:
+        if len(vlans) >= _MAX_VLAN_TAGS:
+            raise PacketDecodeError("too many stacked VLAN tags")
+        if offset + 4 > len(raw):
+            raise PacketDecodeError("short VLAN header")
+        tci = _u16(raw, offset)
+        vlans.append(tci & 0x0FFF)
+        ether_type = _u16(raw, offset + 2)
+        offset += 4
+    return ether_type, raw[offset:], tuple(vlans)
+
+
 def _link_payload(raw: bytes, datalink: int) -> tuple[int, bytes, tuple[int, ...]]:
     """Return ``(ethertype, network_bytes, vlan_ids)`` for supported DLTs."""
 
@@ -66,30 +80,20 @@ def _link_payload(raw: bytes, datalink: int) -> tuple[int, bytes, tuple[int, ...
             raise PacketDecodeError("short Ethernet header")
         ether_type = _u16(raw, 12)
         offset = 14
-        vlans: list[int] = []
-        while ether_type in VLAN_ETHERTYPES:
-            if len(vlans) >= _MAX_VLAN_TAGS:
-                raise PacketDecodeError("too many stacked VLAN tags")
-            if offset + 4 > len(raw):
-                raise PacketDecodeError("short VLAN header")
-            tci = _u16(raw, offset)
-            vlans.append(tci & 0x0FFF)
-            ether_type = _u16(raw, offset + 2)
-            offset += 4
-        return ether_type, raw[offset:], tuple(vlans)
+        return _strip_vlan_tags(raw, ether_type, offset)
 
     if datalink == DLT_LINUX_SLL:
         # Linux cooked capture v1 has a fixed 16-byte header and stores the
         # protocol value in its final two bytes.
         if len(raw) < 16:
             raise PacketDecodeError("short Linux SLL header")
-        return _u16(raw, 14), raw[16:], ()
+        return _strip_vlan_tags(raw, _u16(raw, 14), 16)
 
     if datalink == DLT_LINUX_SLL2:
         # SLL2 is 20 bytes and moved the protocol field to the beginning.
         if len(raw) < 20:
             raise PacketDecodeError("short Linux SLL2 header")
-        return _u16(raw, 0), raw[20:], ()
+        return _strip_vlan_tags(raw, _u16(raw, 0), 20)
 
     if datalink == DLT_RAW:
         if not raw:

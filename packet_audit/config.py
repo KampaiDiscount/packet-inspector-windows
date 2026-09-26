@@ -62,10 +62,23 @@ _CONFIG_SECTION_KEYS: dict[str, frozenset[str]] = {
 }
 
 
+# Keep IP fragments while admitting VLAN-tagged IP on Ethernet and Linux cooked
+# captures. A plain "ip or ip6" BPF only checks the outer EtherType and silently
+# drops tagged frames before either the analyzer or the independent raw ring.
+# The link offsets are Ethernet, Linux SLL v1 and Linux SLL v2 respectively;
+# non-IP frames admitted by a coincidental match are rejected by the decoder.
+_VLAN_ETHERTYPES = (0x8100, 0x88A8, 0x9100, 0x9200)
+DEFAULT_BPF = "ip or ip6 or " + " or ".join(
+    f"link[{offset}:2] = 0x{ethertype:04x}"
+    for offset in (12, 14, 0)
+    for ethertype in _VLAN_ETHERTYPES
+)
+
+
 @dataclass(slots=True)
 class AuditConfig:
     interface: str = "eth0"
-    bpf: str = "ip or ip6"
+    bpf: str = DEFAULT_BPF
     workers: int = max(1, min(8, (os.cpu_count() or 2) - 1))
     queue_size: int = 64
     max_worker_queue_bytes: int = 64 * 1024 * 1024

@@ -6,7 +6,7 @@ param(
     [string]$Interface,
     [string]$CapturePath,
     [string]$OutputRoot,
-    [string]$Bpf='ip or ip6',
+    [string]$Bpf,
     [ValidateRange(1,65535)][int]$Port=8766,
     [switch]$NoBrowser,
     [switch]$NoDashboard
@@ -55,7 +55,8 @@ try {
     }
     if ($Interface) { $runtimeArguments+=@('--interface',$Interface) }
     if ($OutputRoot) { $runtimeArguments+=@('--output-root',$OutputRoot) }
-    $runtimeArguments+=@("--filter=$Bpf",'--port',[string]$Port)
+    if ($PSBoundParameters.ContainsKey('Bpf')) { $runtimeArguments+="--filter=$Bpf" }
+    $runtimeArguments+=@('--port',[string]$Port)
     if ($NoBrowser) { $runtimeArguments+='--no-browser' }
     if ($NoDashboard) { $runtimeArguments+='--no-dashboard' }
     & $environmentPython @runtimeArguments

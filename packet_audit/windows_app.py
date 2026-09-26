@@ -14,7 +14,7 @@ import webbrowser
 
 from .capture import _load_pcapy
 from .cli import _run_runtime, doctor, list_interfaces
-from .config import AuditConfig, _CONFIG_SECTION_KEYS
+from .config import AuditConfig, DEFAULT_BPF, _CONFIG_SECTION_KEYS
 from .platform_tools import find_dumpcap
 from .writer import prepare_private_directory
 
@@ -44,7 +44,7 @@ def select_interface(requested: str | None) -> str:
     raise ValueError('Interface was not found; use a displayed number or exact Npcap device name')
 
 
-def new_run_config(root: Path, *, interface: str, bpf: str = 'ip or ip6', offline: bool = False) -> tuple[AuditConfig, Path]:
+def new_run_config(root: Path, *, interface: str, bpf: str = DEFAULT_BPF, offline: bool = False) -> tuple[AuditConfig, Path]:
     root = prepare_private_directory(root)
     directory = root / (datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ-') + uuid4().hex[:12])
     prepare_private_directory(directory)
@@ -73,7 +73,7 @@ def main(argv=None) -> int:
     parser.add_argument('mode', choices=['start', 'interfaces', 'replay'])
     parser.add_argument('capture', nargs='?', type=Path)
     parser.add_argument('--interface')
-    parser.add_argument('--filter', default='ip or ip6')
+    parser.add_argument('--filter', default=DEFAULT_BPF)
     parser.add_argument('--output-root', type=Path, default=Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'PacketInspector-Windows' / 'evidence')
     parser.add_argument('--port', type=int, default=8766)
     parser.add_argument('--no-dashboard', action='store_true')

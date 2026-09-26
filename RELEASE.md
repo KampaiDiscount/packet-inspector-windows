@@ -1,3 +1,24 @@
+# Unreleased reliability fixes
+
+Responder-style SMB2 exchanges can retain a zero SessionId through the NTLM
+challenge and response. A Type 3 response now pairs with the sole unresolved
+zero-session challenge in its TCP connection at high confidence. Competing
+zero-session challenges remain unpaired and raise a coverage counter. Synthetic
+regressions cover split records, sequential exchanges, ambiguity, and stray
+SMB signatures. Native Windows SMB acceptance remains required before release.
+
+Offline replay now waits for worker queue capacity instead of dropping a burst
+of readable PCAP packets. Live capture keeps its bounded, nonblocking queue and
+visible loss accounting.
+
+The default analyzer and raw-ring filter now admits VLAN-tagged IP frames;
+Ethernet and Linux cooked decoders retain up to eight stacked VLAN IDs. The
+Windows launcher inherits the engine default while preserving an explicit
+custom filter. Native capture on each intended adapter remains a deployment
+qualification step.
+
+---
+
 # Packet Inspector for Windows 0.1.4+win.1
 
 Release date: 2026-09-16. Git tag: `v0.1.4-win.1`. **Test prerelease.**

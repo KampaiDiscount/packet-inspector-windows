@@ -11,6 +11,7 @@ from unittest import mock
 from packet_audit import capture
 from packet_audit.capture import (
     CaptureError,
+    DEFAULT_BPF,
     PcapyLiveSource,
     PcapyOfflineSource,
     PcapyUnavailable,
@@ -184,7 +185,7 @@ class PacketParsingTests(unittest.TestCase):
         self.assertEqual(batch[0].timestamp_ns, 7_000_008_000)
         self.assertEqual(source.stats().dropped, 2)
         self.assertEqual(pcapy.handle.settings["buffer"], 4 * 1024 * 1024)
-        self.assertEqual(pcapy.handle.settings["filter"], "ip or ip6")
+        self.assertEqual(pcapy.handle.settings["filter"], DEFAULT_BPF)
         self.assertEqual(pcapy.handle.settings["nonblock"], 1)
         source.close()
         self.assertTrue(pcapy.handle.settings["closed"])
