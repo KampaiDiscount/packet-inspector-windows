@@ -1,4 +1,4 @@
-# Windows release validation - 0.1.6+win.1
+# Windows release validation - 0.1.6+win.2
 
 Candidate checked on 2026-09-26 with 64-bit Python 3.12.14 and Npcap 1.88.
 The current isolated Windows source passed these checks:
@@ -13,19 +13,32 @@ The current isolated Windows source passed these checks:
   provenance, bounded metadata, filename sanitization, MIME disagreement,
   first-part multipart and byte-zero partial responses. Unsupported framing
   and compressed/HTTP/2 cases raise visible coverage counters.
-- Native Windows replay of a **12-packet Win11 PNG HTTP PCAPNG** produced one
-  high-confidence file-signature finding with complete packet provenance.
+- Native Windows replay of a **12-packet Kali-to-Linode PNG HTTP PCAPNG**
+  produced one high-confidence file-signature finding with complete packet provenance.
   Capture and dispatch counted 12 packets each, with zero reported drops or
   gaps and a complete verdict.
+- A distinct **42-frame live Win11-to-Linode PNG exchange** was captured by Kali
+  and replayed on Windows. The Win11 VM requested the file and received an HTTP
+  200 PNG response; replay processed 42/42 packets, with a complete verdict and
+  zero reported drops. It produced one high-confidence server-to-Win11 PNG
+  file-signature finding with complete provenance (packet 19), plus two
+  medium-confidence cookie candidates from the Win11 requests. The live Kali
+  session counted 4,910 captured and dispatched packets with zero queue drops;
+  forwarding was restored after the bounded test.
 - A separate **46-packet synthetic valid-PNG upload/download PCAP** produced
   two file-signature findings and no credential finding from text embedded in
   the image. Its verdict was incomplete because the existing generic HTTP
   parser counted one image content type as unsupported; this does not erase
   the two file-signature observations.
 - The candidate deployment ZIP's external SHA-256 and all **91 internal
-  manifest entries** matched. It held one 0.1.6+win.1 wheel and one source
+  manifest entries** matched. It held one 0.1.6+win.2 wheel and one source
   archive. Setup from the extracted package installed that wheel offline and
-  the isolated CLI reported `packet-audit 0.1.6+win.1`.
+  the isolated CLI reported `packet-audit 0.1.6+win.2`.
+
+The older 12-packet PNG PCAPNG originated from Kali 192.168.1.10 communicating
+with Linode; Windows was its replay host. This corrects its Win11 attribution
+in the 0.1.6+win.1 notes. The 42-frame live Win11 PNG test above and the separate
+real Win11 HTTP authentication matrix are distinct validation exercises.
 
 The 0.1.5+win.1 results below are historical, including its live-loopback
 and installed-launcher checks; those were not repeated for this candidate.

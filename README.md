@@ -4,15 +4,15 @@ Native Windows packet inspection for authorized network assessments, with
 Npcap capture, TCP stream reconstruction, sensitive-field detection, structured
 evidence exports, and a local dashboard.
 
-**Release: [0.1.6+win.1 — Windows test prerelease](https://github.com/KampaiDiscount/packet-inspector-windows/releases/tag/v0.1.6-win.1).**
+**Release: [0.1.6+win.2 — Windows test prerelease](https://github.com/KampaiDiscount/packet-inspector-windows/releases/tag/v0.1.6-win.2).**
 Aligned with the [Packet Inspector Linux 0.1.6 detector updates](https://github.com/KampaiDiscount/packet-inspector).
 The Windows package is named `packet-inspector-windows`; both `packet-inspector`
 and `packet-audit` remain available as command-line entry points.
 
 ## Download and start
 
-Download the **[deployment ZIP](https://github.com/KampaiDiscount/packet-inspector-windows/releases/download/v0.1.6-win.1/Packet-Inspector-Windows-0.1.6-win1.zip)**
-and its **[SHA-256 checksum](https://github.com/KampaiDiscount/packet-inspector-windows/releases/download/v0.1.6-win.1/Packet-Inspector-Windows-0.1.6-win1.zip.sha256)**.
+Download the **[deployment ZIP](https://github.com/KampaiDiscount/packet-inspector-windows/releases/download/v0.1.6-win.2/Packet-Inspector-Windows-0.1.6-win2.zip)**
+and its **[SHA-256 checksum](https://github.com/KampaiDiscount/packet-inspector-windows/releases/download/v0.1.6-win.2/Packet-Inspector-Windows-0.1.6-win2.zip.sha256)**.
 The deployment ZIP contains the Windows launchers, an offline-install Python
 wheel, source, documentation, and an internal checksum manifest. GitHub's
 automatic **Source code** archives and a Git clone do not contain that wheel.
@@ -77,7 +77,10 @@ guidance](WINDOWS.md#evidence-and-privacy) before use on a shared workstation.
 This is a **test prerelease**. Recorded validation includes native Windows
 Npcap filtering of Ethernet VLAN and loopback PCAPs, synthetic loopback capture,
 installed launchers, offline replay, restricted exports, and clean Ctrl+C
-shutdown. Physical Ethernet/Wi-Fi, live Windows SMB/LDAP, sustained load, and
+shutdown. The current file-signature checks include separate Kali-origin and
+Win11-origin PNG exchanges replayed on Windows; see the provenance in
+[WINDOWS-VALIDATION.md](WINDOWS-VALIDATION.md). Physical Ethernet/Wi-Fi,
+live Windows SMB/LDAP, sustained load, and
 long-duration capture still require deployment-specific acceptance checks.
 
 Encrypted TLS/HTTPS, SSH, and other protected payloads are not decrypted.

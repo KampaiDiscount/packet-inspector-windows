@@ -1,9 +1,14 @@
-# Packet Inspector for Windows 0.1.6+win.1
+# Packet Inspector for Windows 0.1.6+win.2
 
-Release candidate prepared 2026-09-26 for Git tag `v0.1.6-win.1`, aligned with
+Release candidate prepared 2026-09-26 for Git tag `v0.1.6-win.2`, aligned with
 the Linux 0.1.6 detector updates. **Test prerelease.** The deployment ZIP and
 checksum must be attached to the release; automatic source archives do not
 contain the offline wheel.
+
+This revision corrects the PNG replay provenance stated for 0.1.6+win.1: the
+12-packet capture was Kali-to-Linode HTTP traffic replayed on Windows, not a
+Win11-originated transfer. The separate real Win11 HTTP authentication matrix
+is distinct from this file-transfer replay.
 
 Explicit HTTP Bearer credentials are detected even when short, within the
 bounded header limit. Ordinary preference cookies remain visible without being
@@ -24,16 +29,20 @@ file-signature coverage. See [COVERAGE.md](COVERAGE.md) for the bounded
 multipart and partial-response behavior.
 
 The native Windows regression suite passed with 695 tests and 28 subtests;
-9 platform/backend checks were skipped. A 12-packet Win11 PNG HTTP capture
-replayed with a complete verdict, zero reported drops and one high-confidence
-file-signature finding with complete packet provenance. A separate synthetic
-PNG upload/download replay found both file roles without treating text inside
-the image as a credential; its overall verdict remained incomplete because
-the existing generic HTTP-body parser marked one image body content type
-unsupported. Physical-adapter and sustained-load acceptance remain deployment
-checks. A candidate ZIP build passed its external SHA-256 and 91 internal
-manifest checks, contained one 0.1.6+win.1 wheel and source archive, and
-installed the wheel offline from the extracted package. See
+9 platform/backend checks were skipped. A 12-packet Kali-to-Linode PNG HTTP
+capture replayed on Windows with a complete verdict, zero reported drops and
+one high-confidence file-signature finding with complete packet provenance.
+Separately, a live 42-frame Win11-to-Linode PNG exchange captured by Kali and
+replayed on Windows produced one high-confidence server-to-Win11 file-signature
+finding with complete packet provenance; replay processed all 42 frames with a
+complete verdict and zero reported drops. It also reported two medium-confidence
+cookie candidates, whose validity was not tested. A synthetic PNG upload/download
+replay found both file roles and did not treat text inside the image as a
+credential. Its verdict was incomplete because the existing HTTP-body parser
+marked one image content type unsupported. Physical-adapter and sustained-load
+acceptance remain deployment checks. A candidate ZIP build passed its external
+SHA-256 and 91 internal manifest checks, contained one 0.1.6+win.2 wheel and
+source archive, and installed the wheel offline from the extracted package. See
 [WINDOWS-VALIDATION.md](WINDOWS-VALIDATION.md).
 
 ---

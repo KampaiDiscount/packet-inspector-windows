@@ -1,18 +1,29 @@
-# Windows 0.1.6+win.1 candidate validation report
+# Windows 0.1.6+win.2 candidate validation report
 
 Checked 2026-09-26 on Windows 11 with 64-bit Python 3.12.14 and Npcap 1.88.
 The candidate includes the Linux 0.1.6 token-quality and HTTP file-signature
-changes in a separate Windows checkout. Only synthetic token values and an
-authorized Win11 PNG test transfer were used.
+changes in a separate Windows checkout. This validation used synthetic token
+values, an authorized Kali-to-Linode PNG HTTP capture replayed on Windows, and
+a distinct live Win11-to-Linode PNG exchange captured by Kali and replayed on
+Windows. The separate real Win11 HTTP authentication matrix is not either PNG
+capture.
 
 | Check | Result |
 | --- | --- |
 | Full native suite | 695 passed, 9 skipped, 28 subtests passed |
 | Token classification | Short Bearer, preference/session-cookie distinction, signed/unsigned/malformed JWT and four-packet 5.3 KiB JWT regressions passed |
 | File-signature matrix | PNG, JPEG, GIF, WebP, PDF and ZIP request/response findings, split boundaries, partial/multipart limits and binary-body isolation passed |
-| Real Win11 PNG PCAPNG replay | 12 packets processed, one high-confidence PNG finding with complete packet provenance, zero reported drops/gaps, complete verdict |
+| Kali-to-Linode PNG PCAPNG replayed on Windows | 12 packets processed, one high-confidence PNG finding with complete packet provenance, zero reported drops/gaps, complete verdict |
+| Live Win11-to-Linode PNG PCAPNG replayed on Windows | 42/42 packets processed, one high-confidence server-to-Win11 PNG finding with complete packet provenance at packet 19; two medium-confidence cookie candidates; zero reported drops, complete verdict |
 | Synthetic PNG upload/download replay | 46 packets, two PNG findings with complete provenance, no credential finding from image text; incomplete verdict from one existing unsupported HTTP body content-type counter |
-| Candidate ZIP and offline setup | External SHA-256 and 91 internal entries verified; one 0.1.6+win.1 wheel and one source archive; extracted setup installed wheel offline and CLI reported 0.1.6+win.1 |
+| Candidate ZIP and offline setup | External SHA-256 and 91 internal entries verified; one 0.1.6+win.2 wheel and one source archive; extracted setup installed wheel offline and CLI reported 0.1.6+win.2 |
+
+The earlier 0.1.6+win.1 notes incorrectly called the 12-packet PNG source Win11;
+packet addresses identify Kali 192.168.1.10 and Linode. This attribution
+correction does not change its replayed Windows detector result. The separate
+42-frame capture genuinely originated from the Win11 VM, and the live Kali
+capture session counted 4,910 captured and dispatched packets without queue
+drops. Its two cookie candidates were not validated as usable sessions.
 
 This confirms detection and classification for the tested clear HTTP/1 shapes,
 not arbitrary files, encrypted sessions, successful authentication or zero
