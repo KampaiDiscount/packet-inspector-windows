@@ -233,7 +233,7 @@ class _ControlledSource:
         self.eof = True
         return []
 
-    def stats(self): return CaptureStats(0, 0, 0)
+    def stats(self): return CaptureStats(0, 0, None, 0)
     def close(self): self.closed = True
 
 

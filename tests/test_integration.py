@@ -39,6 +39,8 @@ def test_replay_preserves_repeated_http_basic_attempts(tmp_path: Path):
     assert result["worker_packets_processed"] == result["dispatched_packets"]
     assert result["writer_findings_written"] == result["worker_findings_emitted"]
     assert result["worker_queue_byte_health"]["current_bytes"] == 0
+    assert result["worker_queue_byte_health"]["outstanding_batches_by_worker"] == [0]
+    assert result["worker_queue_byte_health"]["peak_outstanding_batches_by_worker"][0] > 0
     assert result["worker_queue_byte_health"]["peak_bytes_sum"] > 0
     assert result["worker_queue_byte_budget_dropped_packets"] == 0
     records = [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()]

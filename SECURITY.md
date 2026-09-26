@@ -10,7 +10,7 @@ reproduction where possible. Describe the impact and any applicable capture,
 dashboard, or filesystem permissions. Remove real credentials, tokens, account
 identifiers, and unrelated network data before attaching logs or captures.
 
-The current release is **0.1.6+win.3**, a Windows test prerelease.
+The current release is **0.1.7+win.1**, a Windows test prerelease.
 Reports against that release and the current `main` branch are welcome. Its
 recorded validation and deployment-specific acceptance boundaries are described
 in [WINDOWS-VALIDATION.md](WINDOWS-VALIDATION.md).

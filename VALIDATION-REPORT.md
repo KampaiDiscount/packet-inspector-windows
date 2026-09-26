@@ -1,4 +1,24 @@
-# Windows 0.1.6+win.3 candidate validation report
+# Windows 0.1.7+win.1 candidate validation report
+
+Checked 2026-09-26 on Windows 11 with 64-bit Python 3.12.14 and Npcap 1.88.
+
+| Check | Result |
+| --- | --- |
+| Native regression suite | 709 passed, 9 expected platform skips, 30 subtests passed |
+| Npcap post-filter counter | 13 loopback packets queued before read and 13 delivered afterward; Npcap reported zero drops |
+| Complete native loopback run | 12 fixed synthetic HTTP Basic requests; 160 captured/post-filter queued packets, 12 written findings, drained batch reservations, complete verdict |
+| Shutdown accounting | Filtered frames do not cause a false mismatch; accepted-but-unread frames, missing stats, or 32-bit wrap make the verdict incomplete in tests |
+| Portable performance fixes | Same private 20,000-frame Win11 fixture: candidate averaged 4.16 s over three runs versus 7.15 s for published 0.1.6+win.3; all 23 findings and existing health counters matched exactly |
+
+The live loopback test disabled the independent raw ring. Npcap's interface
+drop field is unimplemented and shown as unknown. Physical adapters, Win11
+guest sensor installation, and sustained-load capture were not established by
+this test. A complete verdict reports the available capture and processing
+evidence, not universal wire-level or encrypted-protocol coverage.
+
+---
+
+# Historical Windows 0.1.6+win.3 candidate validation report
 
 Checked 2026-09-26 on Windows 11 with 64-bit Python 3.12.14 and Npcap 1.88.
 

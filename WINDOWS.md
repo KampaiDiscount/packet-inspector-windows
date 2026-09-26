@@ -1,13 +1,14 @@
 # Packet Inspector for Windows
 
-Version **0.1.6+win.3** is a Windows test release with the upstream Linux
-0.1.9 HTTP byte-range classifier correction. The Windows package is a separate fork; it does not
-replace or remotely modify a Kali installation.
+Version **0.1.7+win.1** is a Windows test release with the upstream Linux
+0.1.9 classifier and hot-path improvements, plus Npcap-specific shutdown
+accounting. The Windows package is a separate fork; it does not replace or
+remotely modify a Kali installation.
 
 ## First run
 
 Download the attached deployment ZIP from the
-[Windows test release](https://github.com/KampaiDiscount/packet-inspector-windows/releases/tag/v0.1.6-win.3),
+[Windows test release](https://github.com/KampaiDiscount/packet-inspector-windows/releases/tag/v0.1.7-win.1),
 along with its `.zip.sha256` file. GitHub's automatic source archives and a
 Git checkout do not include the wheel expected by `SETUP.cmd`.
 
@@ -15,7 +16,7 @@ From the directory containing both downloaded files, verify the archive before
 extracting it:
 
 ```powershell
-$archive = 'Packet-Inspector-Windows-0.1.6-win3.zip'
+$archive = 'Packet-Inspector-Windows-0.1.7-win1.zip'
 $expected = (Get-Content -LiteralPath "$archive.sha256" -Raw).Trim().Split()[0]
 $actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
 if ($actual -ne $expected) { throw 'ZIP checksum mismatch; do not extract or run it.' }

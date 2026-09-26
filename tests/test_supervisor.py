@@ -89,6 +89,7 @@ def test_dispatch_queue_byte_budget_rejects_before_queue_growth(tmp_path: Path):
     assert supervisor.userspace_queue_drops == 1
     assert supervisor.worker_queue_byte_budget_dropped_packets == 1
     assert supervisor.worker_queue_byte_budget_dropped_bytes == 100
+    assert supervisor.worker_queue_batch_counters[0].value == 0
     assert (
         supervisor.worker_queue_byte_counters[0].value
         == config.max_worker_queue_bytes - 50
@@ -113,6 +114,9 @@ def test_dispatch_queue_full_releases_reserved_bytes(tmp_path: Path):
 
     assert supervisor.worker_queue_byte_counters[0].value == 0
     assert supervisor.worker_queue_byte_peaks[0].value == 100
+    assert supervisor.worker_queue_batch_counters[0].value == 0
+    assert supervisor.worker_queue_batch_peaks[0].value == 1
+    assert supervisor.worker_queue_slot_dropped_packets == 1
     assert supervisor.userspace_queue_drops == 1
     assert supervisor.worker_queue_byte_budget_dropped_packets == 0
 
@@ -147,6 +151,7 @@ def test_offline_replay_waits_for_worker_queue_capacity(tmp_path: Path):
     assert supervisor.dispatched_packets == 1
     assert supervisor.userspace_queue_drops == 0
     assert supervisor.worker_queue_byte_counters[0].value == 100
+    assert supervisor.worker_queue_batch_counters[0].value == 1
 
 
 def test_offline_replay_waits_for_worker_byte_budget(tmp_path: Path):
@@ -172,6 +177,7 @@ def test_offline_replay_waits_for_worker_byte_budget(tmp_path: Path):
     assert supervisor.userspace_queue_drops == 0
     assert supervisor.worker_queue_byte_budget_dropped_packets == 0
     assert supervisor.worker_queue_byte_counters[0].value == 100
+    assert supervisor.worker_queue_batch_counters[0].value == 1
 
 
 def test_worker_fatal_path_releases_dequeued_batch_reservation(
@@ -187,7 +193,9 @@ def test_worker_fatal_path_releases_dequeued_batch_reservation(
     finding_queue: queue.Queue = queue.Queue()
     operational_queue: queue.Queue = queue.Queue()
     control_queue: queue.Queue = queue.Queue()
-    counter = AuditSupervisor(config).ctx.Value("Q", 100)
+    context = AuditSupervisor(config).ctx
+    counter = context.Value("Q", 100)
+    batch_counter = context.Value("Q", 1)
     input_queue.put(([_fragment(3)], 100))
 
     def fail_fragment(_self, _packet):
@@ -207,9 +215,11 @@ def test_worker_fatal_path_releases_dequeued_batch_reservation(
             control_queue,
             1,
             counter,
+            batch_counter,
         )
 
     assert counter.value == 0
+    assert batch_counter.value == 0
 
 
 def test_worker_final_telemetry_drop_is_included_in_stopped_ack(tmp_path: Path):

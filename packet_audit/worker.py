@@ -33,13 +33,13 @@ def _emit_operation(operational_queue, record: dict) -> bool:
         return False
 
 
-def _release_reserved_queue_bytes(queued_byte_counter, reserved_bytes: int) -> None:
-    if queued_byte_counter is None or reserved_bytes <= 0:
+def _release_reserved_queue_units(counter, reserved_units: int) -> None:
+    if counter is None or reserved_units <= 0:
         return
-    lock = queued_byte_counter.get_lock()
+    lock = counter.get_lock()
     with lock:
-        queued_byte_counter.value = max(
-            0, int(queued_byte_counter.value) - int(reserved_bytes)
+        counter.value = max(
+            0, int(counter.value) - int(reserved_units)
         )
 
 
@@ -53,6 +53,7 @@ def worker_process(
     control_queue=None,
     epoch_namespace: int = 0,
     queued_byte_counter=None,
+    queued_batch_counter=None,
 ) -> None:
     ignore_windows_child_interrupts()
     fragments = FragmentReassembler(
@@ -134,6 +135,7 @@ def worker_process(
             stopping = True
         else:
             reserved_queue_bytes = 0
+            reserved_queue_batches = 0
             if (
                 isinstance(item, tuple)
                 and len(item) == 2
@@ -142,6 +144,7 @@ def worker_process(
             ):
                 packet_batch = item[0]
                 reserved_queue_bytes = max(0, item[1])
+                reserved_queue_batches = 1
             else:
                 packet_batch = item if isinstance(item, list) else [item]
             try:
@@ -215,8 +218,11 @@ def worker_process(
                         )
                         raise
             finally:
-                _release_reserved_queue_bytes(
+                _release_reserved_queue_units(
                     queued_byte_counter, reserved_queue_bytes
+                )
+                _release_reserved_queue_units(
+                    queued_batch_counter, reserved_queue_batches
                 )
 
         now = time.monotonic()

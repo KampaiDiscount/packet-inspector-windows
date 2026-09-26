@@ -158,6 +158,7 @@ class _NativeApi:
             "pcap_next_ex": ([pointer, C.POINTER(C.POINTER(_PcapHeader)),
                               C.POINTER(C.POINTER(C.c_ubyte))], C.c_int),
             "pcap_stats": ([pointer, C.POINTER(_PcapStat)], C.c_int),
+            "pcap_stats_ex": ([pointer, C.POINTER(C.c_int)], pointer),
             "pcap_close": ([pointer], None),
             "pcap_compile": ([pointer, C.POINTER(_BpfProgram), C.c_char_p,
                               C.c_int, C.c_uint32], C.c_int),
@@ -394,14 +395,34 @@ class NpcapHandle:
             self._received += 1
             return copied_header, data
 
-    def stats(self) -> tuple[int, int, int]:
+    def stats(self) -> tuple[int | None, ...]:
         with self._lock:
             self._require()
             if self._offline:
                 return self._received, 0, 0
-            values = _PcapStat()
-            self._check("stats", self._api.pcap_stats(self._pointer, C.byref(values)))
-            return int(values.ps_recv), int(values.ps_drop), int(values.ps_ifdrop)
+            # Npcap ps_recv includes packets rejected by BPF. Its extended
+            # ps_capt is post-filter and queued for this capture handle, so it
+            # is the appropriate delivery counter at shutdown. The returned
+            # pointer is owned by Npcap; copy only the declared prefix while
+            # holding the handle lock.
+            allocated = C.c_int()
+            pointer = self._api.pcap_stats_ex(self._pointer, C.byref(allocated))
+            if not pointer:
+                raise NpcapError(f"stats_ex failed: {self.geterr()}")
+            prefix_size = _PcapStat.ps_capt.offset + C.sizeof(C.c_uint32)
+            if allocated.value < prefix_size:
+                raise NpcapError(
+                    f"stats_ex returned {allocated.value} bytes; "
+                    f"{prefix_size} required for ps_capt"
+                )
+            prefix = C.string_at(pointer, prefix_size)
+            values = tuple(
+                int.from_bytes(prefix[offset:offset + 4], "little")
+                for offset in range(0, prefix_size, 4)
+            )
+            # Npcap documents ps_ifdrop as unused and always zero. Preserve
+            # that lack of visibility instead of reporting a measured zero.
+            return values[0], values[1], None, values[3]
 
     def close(self) -> None:
         with self._lock:

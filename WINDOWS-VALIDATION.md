@@ -1,4 +1,44 @@
-# Windows release validation - 0.1.6+win.3
+# Windows release validation - 0.1.7+win.1
+
+Checked on 2026-09-26 with Windows 11, 64-bit Python 3.12.14 and Npcap 1.88.
+The complete native suite passed **709 tests, 9 expected platform skips and
+30 subtests**. The capture-accounting tests include filtered-out traffic,
+accepted-but-unread packets, missing statistics, and the 32-bit counter limit.
+The portable detector and packet tests cover the HTTP/LDAP prefilters and
+retention of fragment data while avoiding duplicate unfragmented payloads.
+
+An actual Npcap loopback counter test observed 13 post-filter packets queued
+before any application read, then 13 delivered and zero Npcap drops after
+draining. A separate complete native loopback run sent 12 fixed synthetic HTTP
+Basic requests and recorded 160 captured packets, 160 post-filter queued,
+zero Npcap drops, 12 findings, zero outstanding worker batches and a complete
+verdict. The independent raw PCAPNG ring was disabled for that bounded run;
+its earlier launcher/stop checks remain historical rather than requalified by
+this test.
+
+A separate 20,000-frame offline replay of a private Win11 transfer capture
+averaged 4.16 seconds across three runs of this candidate, versus 7.15 seconds
+for the published 0.1.6+win.3 package on the same host and fixture (about 42%
+less time). Every run processed all 20,000 frames, wrote the same 23 findings
+with identical material and provenance, and reported zero queue drops, parser
+errors, TCP gaps or incomplete reasons. The new batch reservations drained to
+zero. This bounded replay compares analyzer throughput; it does not measure
+physical-adapter capture loss or long-running performance.
+
+Npcap documents `ps_recv` as including traffic that did not pass BPF and
+`ps_capt` as post-filter packets queued for capture. The latter is used for
+final delivery reconciliation. Npcap's `ps_ifdrop` is always zero because it
+is not implemented; the sensor now reports interface drops as unknown. A
+complete verdict is therefore about measured delivery through this handle,
+not a proof that every wire packet reached the NIC or that every encrypted or
+unsupported payload was understood. The 32-bit counter boundary is marked
+incomplete rather than silently wrapping. Physical Ethernet/Wi-Fi adapters,
+Win11 guest installation, sustained load and long soak still need their own
+acceptance checks.
+
+---
+
+# Historical Windows release validation - 0.1.6+win.3
 
 Checked on 2026-09-26 with Windows 11, 64-bit Python 3.12.14 and Npcap 1.88.
 The five HTTP byte-range regressions passed, and the complete native suite

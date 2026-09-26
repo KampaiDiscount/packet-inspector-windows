@@ -10,7 +10,7 @@ from unittest.mock import Mock
 import pytest
 
 from packet_audit import npcap as n
-from packet_audit.capture import PcapyOfflineSource
+from packet_audit.capture import PcapyOfflineSource, _PcapySource
 
 
 @pytest.fixture
@@ -26,6 +26,7 @@ def api():
     result.pcap_getnonblock = Mock(return_value=1)
     result.pcap_geterr = Mock(return_value=b"synthetic native failure")
     result.pcap_next_ex = Mock(return_value=-2)
+    result.pcap_stats_ex = Mock(return_value=0)
     result.pcap_create = Mock(return_value=123)
     result.pcap_open_offline_with_tstamp_precision = Mock(return_value=123)
     return result
@@ -246,18 +247,42 @@ def test_windows_extended_stats_buffer_and_errors(api):
     capture = handle(api, offline=False)
     capture.activate()
 
-    def stats(_pointer, output):
-        values = C.cast(output, C.POINTER(n._PcapStat)).contents
-        for index, (field, _) in enumerate(n._PcapStat._fields_):
-            setattr(values, field, 10 + index)
-        return 0
+    values = n._PcapStat()
+    for index, (field, _) in enumerate(n._PcapStat._fields_):
+        setattr(values, field, 10 + index)
 
-    api.pcap_stats.side_effect = stats
-    assert capture.stats() == (10, 11, 12)
-    api.pcap_stats.side_effect = None
-    api.pcap_stats.return_value = -1
-    with pytest.raises(n.NpcapError, match="stats failed"):
+    def extended(_pointer, allocated):
+        C.cast(allocated, C.POINTER(C.c_int))[0] = C.sizeof(n._PcapStat)
+        return C.addressof(values)
+
+    api.pcap_stats_ex.side_effect = extended
+    # ps_recv includes filtered-out traffic; ps_ifdrop is undocumented as a
+    # real measurement on Npcap and must not be presented as measured zero.
+    assert capture.stats() == (10, 11, None, 13)
+    api.pcap_stats.assert_not_called()
+
+    def short(_pointer, allocated):
+        C.cast(allocated, C.POINTER(C.c_int))[0] = 12
+        return C.addressof(values)
+
+    api.pcap_stats_ex.side_effect = short
+    with pytest.raises(n.NpcapError, match="required for ps_capt"):
         capture.stats()
+    api.pcap_stats_ex.side_effect = None
+    api.pcap_stats_ex.return_value = 0
+    with pytest.raises(n.NpcapError, match="stats_ex failed"):
+        capture.stats()
+
+
+def test_capture_stats_exposes_post_filter_count_without_inventing_interface_drops():
+    handle = SimpleNamespace(datalink=lambda: 1, stats=lambda: (100, 0, None, 7))
+    source = _PcapySource(
+        handle, interface="synthetic", session_id=None, batch_size=1, offline=False
+    )
+    stats = source.stats()
+    assert stats.received == 100
+    assert stats.queued_for_capture == 7
+    assert stats.interface_dropped is None
 
 
 def test_close_is_idempotent_and_closed_reads_are_errors(api):

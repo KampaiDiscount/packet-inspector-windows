@@ -1,4 +1,31 @@
-# Packet Inspector for Windows 0.1.6+win.3
+# Packet Inspector for Windows 0.1.7+win.1
+
+Release prepared 2026-09-26 for Git tag `v0.1.7-win.1`. **Test prerelease.**
+On Windows, final capture health now compares Npcap's post-filter
+`pcap_stats_ex().ps_capt` count with packets delivered to the analyzer. A
+nonzero gap, unavailable statistics, or a wrapped 32-bit counter makes the
+verdict incomplete. Npcap's `ps_recv` includes traffic outside the filter and
+is deliberately not used for this comparison. Npcap does not implement an
+interface-drop measurement, so its `interface_dropped` field is unknown rather
+than a measured zero.
+
+The analyzer now reports worker batch reservations and queue-slot pressure,
+and an unfinished reservation makes shutdown incomplete. Portable hot-path
+changes avoid duplicate TCP/UDP payload copies and unnecessary HTTP/LDAP
+binary scans. The default 64 queue slots and 64 MiB per-worker byte limit are
+unchanged; tuning them needs representative live-load evidence.
+
+The native Windows suite passed 709 tests, 9 expected platform skips and
+30 subtests. A bounded Npcap loopback test sent 12 synthetic HTTP Basic
+requests: 160 captured and post-filter queued packets reconciled, all 12
+findings were written, worker batch reservations drained, and the final
+verdict was complete. That test disabled the separate raw ring; it does not
+qualify arbitrary adapters or sustained line-rate capture. See
+[WINDOWS-VALIDATION.md](WINDOWS-VALIDATION.md) for the remaining limits.
+
+---
+
+# Historical Packet Inspector for Windows 0.1.6+win.3
 
 Release prepared 2026-09-26 for Git tag `v0.1.6-win.3`. **Test prerelease.**
 This revision ports the Linux 0.1.9 HTTP byte-range correction to the native

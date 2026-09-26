@@ -33,6 +33,9 @@ class CaptureStats:
     received: int | None
     dropped: int | None
     interface_dropped: int | None
+    # Npcap ps_capt from pcap_stats_ex: packets passing BPF and queued for
+    # this handle. None for offline readers and non-Windows libpcap bindings.
+    queued_for_capture: int | None = None
 
 
 def _load_pcapy() -> Any:
@@ -327,9 +330,10 @@ class _PcapySource:
             return CaptureStats(None, None, None)
         values = tuple(values)
         return CaptureStats(
-            int(values[0]) if len(values) > 0 else None,
-            int(values[1]) if len(values) > 1 else None,
-            int(values[2]) if len(values) > 2 else None,
+            int(values[0]) if len(values) > 0 and values[0] is not None else None,
+            int(values[1]) if len(values) > 1 and values[1] is not None else None,
+            int(values[2]) if len(values) > 2 and values[2] is not None else None,
+            int(values[3]) if len(values) > 3 and values[3] is not None else None,
         )
 
     def close(self) -> None:
