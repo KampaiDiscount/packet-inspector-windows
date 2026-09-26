@@ -2340,6 +2340,10 @@ class SensitiveDetector:
             packet_ids_override=pair_packet_ids,
             packet_ids_complete_override=pair_packet_ids_complete,
         )
+        if finding is not None and response.smb_session == 0:
+            state.ntlm_zero_session_last_type3_ns = max(
+                state.ntlm_zero_session_last_type3_ns, response.timestamp_ns
+            )
         return [finding] if finding else []
 
     def _scan_ntlm_raw(self, ctx: _ScanContext, state: _FlowState) -> list[Finding]:
@@ -2354,7 +2358,7 @@ class SensitiveDetector:
             retained = state.directions.get(ctx.direction)
             smb_session = None
             if retained is not None and ctx.base_offset is not None:
-                if _ports(ctx.flow) & {139, 445} and smb2_header_seen(retained.data):
+                if not state.smb2_seen and _ports(ctx.flow) & {139, 445} and smb2_header_seen(retained.data):
                     state.smb2_seen = True
                 position = ctx.base_offset + match.start() - retained.base_offset
                 if 0 <= position < len(retained.data):
@@ -2383,12 +2387,6 @@ class SensitiveDetector:
                     and not (smb_session == 0 and state.ntlm_zero_session_ambiguous),
                 )
             )
-            if smb_session == 0 and _kind == 3 and not state.ntlm_zero_session_ambiguous:
-                prior = state.ntlm_challenges.get((1 - ctx.direction, 0))
-                if prior is not None and prior.timestamp_ns <= ctx.observed_timestamp_ns:
-                    state.ntlm_zero_session_last_type3_ns = max(
-                        state.ntlm_zero_session_last_type3_ns, ctx.observed_timestamp_ns
-                    )
         state.ntlm_pending[ctx.direction] = pending
         return findings
 

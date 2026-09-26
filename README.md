@@ -4,15 +4,15 @@ Native Windows packet inspection for authorized network assessments, with
 Npcap capture, TCP stream reconstruction, sensitive-field detection, structured
 evidence exports, and a local dashboard.
 
-**Current release: [0.1.4+win.1 — Windows test prerelease](https://github.com/KampaiDiscount/packet-inspector-windows/releases/tag/v0.1.4-win.1).**
-Based on the [Packet Inspector Linux 0.1.4 engine](https://github.com/KampaiDiscount/packet-inspector).
+**Release: [0.1.5+win.1 — Windows test prerelease](https://github.com/KampaiDiscount/packet-inspector-windows/releases/tag/v0.1.5-win.1).**
+Aligned with the [Packet Inspector Linux 0.1.5 fixes](https://github.com/KampaiDiscount/packet-inspector).
 The Windows package is named `packet-inspector-windows`; both `packet-inspector`
 and `packet-audit` remain available as command-line entry points.
 
 ## Download and start
 
-Download the **[deployment ZIP](https://github.com/KampaiDiscount/packet-inspector-windows/releases/download/v0.1.4-win.1/Packet-Inspector-Windows-0.1.4-win1.zip)**
-and its **[SHA-256 checksum](https://github.com/KampaiDiscount/packet-inspector-windows/releases/download/v0.1.4-win.1/Packet-Inspector-Windows-0.1.4-win1.zip.sha256)**.
+Download the **[deployment ZIP](https://github.com/KampaiDiscount/packet-inspector-windows/releases/download/v0.1.5-win.1/Packet-Inspector-Windows-0.1.5-win1.zip)**
+and its **[SHA-256 checksum](https://github.com/KampaiDiscount/packet-inspector-windows/releases/download/v0.1.5-win.1/Packet-Inspector-Windows-0.1.5-win1.zip.sha256)**.
 The deployment ZIP contains the Windows launchers, an offline-install Python
 wheel, source, documentation, and an internal checksum manifest. GitHub's
 automatic **Source code** archives and a Git clone do not contain that wheel.
@@ -62,11 +62,11 @@ guidance](WINDOWS.md#evidence-and-privacy) before use on a shared workstation.
 
 ## Validation and limits
 
-This is a **test prerelease**. The published validation records native Windows
-loopback capture, repeated synthetic logins, installed launchers, offline
-replay, restricted exports, and clean Ctrl+C shutdown. Physical Ethernet/Wi-Fi,
-live Windows SMB/LDAP, sustained load, and long-duration capture still require
-deployment-specific acceptance checks.
+This is a **test prerelease**. Recorded validation includes native Windows
+Npcap filtering of Ethernet VLAN and loopback PCAPs, synthetic loopback capture,
+installed launchers, offline replay, restricted exports, and clean Ctrl+C
+shutdown. Physical Ethernet/Wi-Fi, live Windows SMB/LDAP, sustained load, and
+long-duration capture still require deployment-specific acceptance checks.
 
 Encrypted TLS/HTTPS, SSH, and other protected payloads are not decrypted.
 Packet loss, unsupported wire formats, and bounded resources can leave evidence

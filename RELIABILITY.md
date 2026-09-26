@@ -1,5 +1,20 @@
 # Reliability and acceptance gate
 
+## What 0.1.5 changes
+
+- Validated SMB2 frames with a zero SessionId retain that value. A Type 3
+  response can correlate with the sole unresolved Type 2 challenge in the same
+  TCP connection at high confidence; competing challenges stay unpaired and
+  raise a coverage counter. Deferred reassembly and sequential exchanges have
+  regressions.
+- Offline replay waits for worker queue capacity so a readable PCAP burst does
+  not become an artificial userspace loss. Live capture remains bounded and
+  reports queue drops.
+- The default analyzer and raw-ring filter admits recognized outer VLAN tags.
+  The decoder handles up to eight stacked Ethernet/Linux cooked tags and drops
+  non-IP traffic admitted by the broad filter. Npcap native replay tests check
+  tagged Ethernet and Windows loopback capture filter behavior.
+
 ## What 0.1.4 changes
 
 - Capture uses bounded `next()` reads instead of native callback dispatch when

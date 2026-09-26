@@ -1,4 +1,48 @@
-# Windows release validation - 0.1.4+win.1
+# Windows release validation - 0.1.5+win.1
+
+Candidate checked on 2026-09-26 with 64-bit Python 3.12.14 and Npcap 1.88.
+The 0.1.5+win.1 source and extracted deployment ZIP passed these checks:
+
+- **663 passed, 9 skipped, 28 subtests passed** in the complete Windows suite.
+  The skipped tests require Linux/POSIX behavior rather than Windows Npcap.
+- Native Npcap offline filtering retained untagged IPv4/IPv6, single- and
+  double-tag Ethernet IP using 802.1Q, 802.1ad, 0x9100 and 0x9200, plus
+  Windows loopback IPv4/IPv6. It also verified the shared analyzer/raw-ring
+  default filter.
+- The deployment ZIP's external SHA-256 and all 89 internal manifest entries
+  matched. It contained one 0.1.5+win.1 wheel and one source archive. Fresh
+  offline setup installed the wheel in its package-local environment.
+- A native loopback run sent **12 synthetic HTTP Basic logins**; it emitted 12
+  findings, and both the analyzer and independent raw ring counted 132 packets.
+  Verdict: complete; private ACL verified; no forced raw termination.
+- The installed PowerShell 5.1 launcher captured another 12/12 synthetic
+  logins. Its dashboard showed all 12 with endpoints. A Ctrl+C event sent to
+  that owned test console drained capture and viewer, exited zero and produced
+  a complete verdict. Installed replay of its 132-packet raw ring reproduced
+  12 findings with zero queue drops and a complete verdict.
+
+These checks used synthetic loopback traffic and offline Ethernet frames. They
+do not qualify a physical Ethernet/Wi-Fi adapter, live Windows SMB/LDAP,
+sustained capture load, or every host/security-software combination. Apply the
+deployment acceptance steps below before relying on a sensor in an assessment.
+
+## Deployment acceptance checks
+
+1. Verify the package checksum, Python architecture, Npcap access and exact
+   interface. Confirm the default or explicit capture filter on the live host.
+2. Generate authorized ground-truth authentication on each required protocol;
+   compare both directions, raw capture, expected attempts and exported
+   findings. For SMB, check both nonzero and zero SessionId exchanges if the
+   target and test tooling exercise them.
+3. Check loss and coverage counters, worker progress, raw-ring rotation and
+   the final verdict across idle periods and representative load. Preserve
+   evidence before the bounded raw ring rotates it out.
+4. Confirm a clean Ctrl+C drain and private evidence access on the intended
+   host. Treat missing or incomplete verdicts as unresolved coverage.
+
+---
+
+# Historical Windows release validation - 0.1.4+win.1
 
 Candidate build, validated on 2026-09-16. Source baseline: upstream 0.1.4,
 commit `575dc2364d20bb7e7e36d96edeaef207c61ff41f`. Test traffic is synthetic;

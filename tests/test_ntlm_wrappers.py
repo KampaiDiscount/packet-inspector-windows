@@ -136,6 +136,32 @@ def test_sequential_zero_session_challenges_can_pair():
         client_offset += len(response)
 
 
+def test_deferred_zero_session_pair_allows_following_exchange():
+    detector = SensitiveDetector("synthetic-deferred-zero-session")
+    target = flow(dport=445)
+    first_challenge = smb2(ntlm_type2(b"FIRSTONE"), 0, response=True)
+    first_response = smb2(ntlm_type3(nt_response=b"N" * 24), 0)
+    second_challenge = smb2(ntlm_type2(b"SECOND__"), 0, response=True)
+    second_response = smb2(ntlm_type3(nt_response=b"N" * 24), 0)
+
+    # Reassembly can finish the response before the earlier challenge.
+    feed(detector, first_response, target, direction=0, timestamp=2_000,
+         width=4096)
+    findings, _ = feed(detector, first_challenge, target, direction=1,
+                       packet_id=2, timestamp=1_000, width=4096)
+    assert len(by_type(findings, "netntlmv1")) == 1
+
+    feed(detector, second_challenge, target, direction=1,
+         offset=len(first_challenge), packet_id=3, timestamp=3_000, width=4096)
+    findings, _ = feed(detector, second_response, target, direction=0,
+                       offset=len(first_response), packet_id=4,
+                       timestamp=4_000, width=4096)
+    pairs = by_type(findings, "netntlmv1")
+    assert len(pairs) == 1
+    assert pairs[0].material["challenge_hex"] == b"SECOND__".hex()
+    assert detector.stats().get("coverage_ntlm_zero_session_ambiguous", 0) == 0
+
+
 def test_smb_signature_without_a_header_does_not_disable_unscoped_ntlm():
     detector = SensitiveDetector("synthetic-smb-decoy")
     target = flow(dport=445)

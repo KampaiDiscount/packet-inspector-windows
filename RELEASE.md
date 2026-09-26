@@ -1,11 +1,17 @@
-# Unreleased reliability fixes
+# Packet Inspector for Windows 0.1.5+win.1
+
+Release candidate prepared 2026-09-26 for Git tag `v0.1.5-win.1`. Shared-engine
+changes align with Linux 0.1.5 commit `a69fdcf62502d602dd67c1016bb359c2687ec8a4`.
+**Test prerelease.** The deployment ZIP and checksum must be attached to that
+release; GitHub's automatic source archives do not contain the offline wheel.
 
 Responder-style SMB2 exchanges can retain a zero SessionId through the NTLM
 challenge and response. A Type 3 response now pairs with the sole unresolved
 zero-session challenge in its TCP connection at high confidence. Competing
 zero-session challenges remain unpaired and raise a coverage counter. Synthetic
 regressions cover split records, sequential exchanges, ambiguity, and stray
-SMB signatures. Native Windows SMB acceptance remains required before release.
+SMB signatures and deferred reassembly. Native Windows SMB acceptance remains a
+deployment qualification step before relying on live SMB capture.
 
 Offline replay now waits for worker queue capacity instead of dropping a burst
 of readable PCAP packets. Live capture keeps its bounded, nonblocking queue and
@@ -16,6 +22,16 @@ Ethernet and Linux cooked decoders retain up to eight stacked VLAN IDs. The
 Windows launcher inherits the engine default while preserving an explicit
 custom filter. Native capture on each intended adapter remains a deployment
 qualification step.
+
+The complete Windows suite passed with 663 tests and 28 subtests; 9
+platform/backend checks were skipped. Native Npcap 1.88 replay accepted
+untagged, single-tag and stacked-tag Ethernet IP, and loopback IPv4/IPv6.
+The extracted ZIP installed its bundled wheel offline; its launcher captured
+12/12 synthetic loopback logins, displayed all 12, and stopped cleanly with a
+complete verdict. Installed replay read all 132 raw-ring packets and reproduced
+12 findings without queue drops. Physical adapter capture, sustained
+throughput and the assessment traffic mix remain deployment-specific gates.
+See [VALIDATION-REPORT.md](VALIDATION-REPORT.md).
 
 ---
 

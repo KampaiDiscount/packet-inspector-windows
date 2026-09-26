@@ -1,4 +1,28 @@
-# Windows candidate validation report
+# Windows 0.1.5+win.1 candidate validation report
+
+Checked 2026-09-26 on Windows with 64-bit Python 3.12.14, Npcap 1.88 and
+the native Windows PowerShell 5.1 launcher. Validation used synthetic
+loopback authentication and offline Ethernet VLAN frames. It did not use
+physical-adapter interception or real client credentials.
+
+| Check | Result |
+| --- | --- |
+| Full unit/integration/regression suite | 663 passed, 9 skipped, 28 subtests passed |
+| Native Npcap default BPF | Untagged IPv4/IPv6, single/double VLAN-tagged Ethernet IP and Windows loopback IPv4/IPv6 retained |
+| Direct native loopback capture | 12/12 synthetic logins; 132 analyzer packets and 132 raw-ring packets; complete verdict and private evidence ACL |
+| Deployment ZIP integrity and setup | External SHA-256 plus all 89 internal entries verified; one wheel and source archive; fresh offline wheel install loaded 0.1.5+win.1 from its package-local environment |
+| Installed launcher and viewer | 12/12 synthetic findings with endpoints; owned Ctrl+C drained cleanly, viewer closed, exit 0, complete verdict |
+| Installed offline replay | 132 packets, 12 findings, zero queue drops, complete verdict |
+
+The SMB zero-SessionId, deferred reassembly and replay-backpressure regressions
+are synthetic. Live Windows SMB/LDAP, physical Ethernet/Wi-Fi VLAN delivery,
+sustained line-rate traffic and long soaks remain deployment acceptance gates.
+The prior 0.1.4+win.1 evidence below is historical and is not a substitute for
+these 0.1.5-specific checks.
+
+---
+
+# Historical Windows 0.1.4+win.1 candidate validation report
 
 Build: `0.1.4+win.1`, 2026-09-16. Baseline: upstream
 `575dc2364d20bb7e7e36d96edeaef207c61ff41f` (Linux 0.1.4).
