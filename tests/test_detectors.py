@@ -331,6 +331,92 @@ def test_http_material_and_absolute_offset_retry_semantics() -> None:
     assert retry_basic[0].stream_offset == len(request) + request.index(authorization)
 
 
+def test_framed_http_form_does_not_become_terminal_authentication() -> None:
+    body = b"username=synthetic-user&password=synthetic-password"
+    request = (
+        b"POST /form HTTP/1.1\r\n"
+        b"Host: synthetic.invalid\r\n"
+        b"Content-Type: application/x-www-form-urlencoded\r\n"
+        b"Content-Length: " + str(len(body)).encode() + b"\r\n\r\n" + body
+    )
+    findings = SensitiveDetector("session").process_stream(
+        chunk(request, target_flow=flow(40000, 8888))
+    )
+    assert any(
+        item.material["value"] == "synthetic-password"
+        for item in by_type(findings, "sensitive_field")
+    )
+    assert not by_type(findings, "telnet_like_login_field")
+    assert not by_type(findings, "http_text_login_field")
+    assert not any(
+        item.protocol in {"telnet", "plaintext_terminal", "ftp_or_pop3", "ftp", "pop3", "smtp", "imap"}
+        for item in findings
+    )
+
+
+def test_http_authorization_scheme_is_not_a_generic_secret() -> None:
+    body = b"client_secret=synthetic-secret-123\n"
+    request = (
+        b"POST /generic HTTP/1.1\r\n"
+        b"Host: synthetic.invalid\r\n"
+        b"Authorization: Negotiate synthetic-placeholder\r\n"
+        b"Content-Type: text/plain\r\n"
+        b"Content-Length: " + str(len(body)).encode() + b"\r\n\r\n" + body
+    )
+    findings = SensitiveDetector("session").process_stream(
+        chunk(request, target_flow=flow(40000, 8888))
+    )
+    named = by_type(findings, "named_secret")
+    assert [(item.material["name"], item.material["value"]) for item in named] == [
+        ("client_secret", "synthetic-secret-123")
+    ]
+
+
+def test_http_text_line_keeps_short_secret_with_http_context() -> None:
+    body = b"login: synthetic-user\npassword: x\n"
+    request = (
+        b"POST /text HTTP/1.1\r\n"
+        b"Host: synthetic.invalid\r\n"
+        b"Content-Type: text/plain\r\n"
+        b"Content-Length: " + str(len(body)).encode() + b"\r\n\r\n" + body
+    )
+    findings = SensitiveDetector("session").process_stream(
+        chunk(request, target_flow=flow(40000, 8888))
+    )
+    fields = by_type(findings, "http_text_login_field")
+    assert [(item.protocol, item.material["field"], item.material["value"]) for item in fields] == [
+        ("http", "login", "synthetic-user"),
+        ("http", "password", "x"),
+    ]
+    assert not by_type(findings, "telnet_like_login_field")
+
+
+def test_unframed_name_value_is_generic_not_http() -> None:
+    line = b"api_key=synthetic-key-123\r\n"
+    findings = SensitiveDetector("session").process_stream(
+        chunk(line, target_flow=flow(40000, 2323))
+    )
+    field = by_type(findings, "sensitive_field")[0]
+    assert field.protocol == "generic"
+    assert field.confidence == "medium"
+    assert field.material["source"] == "unframed_name_value"
+    assert field.material["value"] == "synthetic-key-123"
+    assert by_type(findings, "named_secret")
+
+
+def test_http_response_start_line_gives_unframed_field_http_context() -> None:
+    response = (
+        b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n"
+        b"api_key=synthetic-key-123\r\n"
+    )
+    findings = SensitiveDetector("session").process_stream(
+        chunk(response, target_flow=flow(40000, 8888), direction=1)
+    )
+    field = by_type(findings, "sensitive_field")[0]
+    assert field.protocol == "http"
+    assert field.material["value"] == "synthetic-key-123"
+
+
 def test_split_stream_header_is_reconstituted_without_partial_false_hit() -> None:
     detector = SensitiveDetector("session")
     whole = b"Authorization: Bearer abcdefghijklmnopqrstuvwxyz\r\n"

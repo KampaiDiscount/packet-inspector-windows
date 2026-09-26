@@ -149,6 +149,12 @@ _PAYMENT_CARD_RE = re.compile(rb"(?<!\d)(?:\d[ -]?){12,18}\d(?!\d)")
 _HTTP_GATE_RE = re.compile(
     rb"(?i)(?:authorization|authenticate|cookie|set-cookie|\b(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|CONNECT|TRACE)\s|(?:password|passwd|pwd|pass|token|api[_-]?key|secret|session|sid)=)"
 )
+_HTTP_START_LINE_RE = re.compile(
+    rb"(?m)^(?:(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|CONNECT|TRACE) [^\r\n ]{1,8192} HTTP/1\.[01]|HTTP/1\.[01] [1-5][0-9]{2}(?: [^\r\n]{0,256})?)\r?\n"
+)
+_HTTP_TEXT_FIELD_RE = re.compile(
+    rb"(?im)^(login|logon|username|user|password|passwd|passcode)[ \t]*[:=][ \t]*([^\r\n&;]{1,4096})\r?$"
+)
 _LINE_GATE_RE = re.compile(
     rb"(?im)(?:^|\r?\n)(?:USER|PASS|AUTH\s|\S+\s+(?:LOGIN|AUTHENTICATE)\s|NICK\s|PRIVMSG\s|JOIN\s|CAP\s|(?:login|logon|username|password|passwd|passcode)\s*[:=])"
 )
@@ -2480,7 +2486,32 @@ class SensitiveDetector:
         # The sentinel is not part of a match or its packet provenance.
         generic_data = message_ctx.data[:message.header_end] if message.encoded_content else message_ctx.data
         generic_ctx = replace(message_ctx, data=bytes(generic_data) + (b"\n" if message.complete else b""))
-        findings.extend(self._scan_line_protocols(generic_ctx, state))
+        # A framed HTTP body can contain form fields such as
+        # "username=...&password=...".  Those are HTTP fields, not a Telnet,
+        # FTP, POP3, SMTP, or IMAP exchange even when the line resembles one.
+        # Keep the protocol-specific HTTP parser and generic secret scan below.
+        if not message.encoded_content and message.content_type not in {
+            "application/x-www-form-urlencoded", "application/json"
+        } and not message.content_type.endswith("+json"):
+            for match in _HTTP_TEXT_FIELD_RE.finditer(
+                message.body + (b"\n" if message.complete else b"")
+            ):
+                value = match.group(2).rstrip(b" \t")
+                if not value:
+                    continue
+                start, end = message.wire_span(match.start(2), match.start(2) + len(value))
+                label = match.group(1).decode("ascii")
+                finding = self._emit(
+                    message_ctx, state, detector="http_text_login_field",
+                    start=start, end=end,
+                    category="credential" if label.lower() in {"password", "passwd", "passcode"} else "identity",
+                    protocol="http", material_type="http_text_login_field",
+                    material={"field": label, "value": value.decode("latin-1"), "source": "text_body"},
+                    confidence="medium",
+                    limitations=["Credential-like line in an HTTP body; application use and authentication success were not established."],
+                )
+                if finding:
+                    findings.append(finding)
         if self.generic_secret_scan:
             findings.extend(self._scan_generic_secrets(generic_ctx, state))
             findings.extend(self._scan_pem_private_keys(generic_ctx, state))
@@ -2599,7 +2630,14 @@ class SensitiveDetector:
         # a body field that appears between two request lines.
         framer = state.http_framers.get(ctx.direction)
         if framer is None or not framer.recognized:
-            findings.extend(self._emit_sensitive_fields(ctx, state, data, 0, source="url_or_form"))
+            # A bare name=value line occurs in many plaintext protocols. Keep
+            # the candidate, but claim HTTP only when a start line is visible.
+            http_start_seen = _HTTP_START_LINE_RE.search(data) is not None
+            findings.extend(self._emit_sensitive_fields(
+                ctx, state, data, 0,
+                source="url_or_form" if http_start_seen else "unframed_name_value",
+                protocol="http" if http_start_seen else "generic",
+            ))
 
         if 5060 in _ports(ctx.flow) or b"SIP/2.0" in data[:65536]:
             findings.extend(self._scan_sip_digest(ctx, state))
@@ -2618,6 +2656,7 @@ class SensitiveDetector:
         data_offset: int,
         *,
         source: str,
+        protocol: str,
     ) -> list[Finding]:
         findings: list[Finding] = []
         for match in _FORM_FIELD_RE.finditer(data):
@@ -2636,11 +2675,12 @@ class SensitiveDetector:
                 start=data_offset + match.start(2),
                 end=data_offset + match.end(2),
                 category="credential",
-                protocol="http",
+                protocol=protocol,
                 material_type="sensitive_field",
                 material={"name": name, "encoded_value": encoded, "value": decoded, "source": source},
-                confidence="high",
-                limitations=["Field name indicates sensitivity; application semantics were not validated."],
+                confidence="high" if protocol == "http" else "medium",
+                limitations=["Field name indicates sensitivity; application semantics were not validated."] +
+                    ([] if protocol == "http" else ["No HTTP start line was observed; protocol is unknown."]),
                 identity_suffix=(name.lower(),),
             )
             if finding:
@@ -3476,6 +3516,14 @@ class SensitiveDetector:
         for match in _GENERIC_ASSIGNMENT_RE.finditer(data):
             name = match.group(1).decode("ascii", "ignore")
             if name.lower() not in self.sensitive_fields:
+                continue
+            # The assignment scanner stops at whitespace.  In an HTTP
+            # Authorization header it otherwise treats "Negotiate" as the
+            # secret and emits a false candidate for the authentication
+            # scheme, leaving the real token to the protocol parser.
+            if name.lower() == "authorization" and match.group(2).lower() in {
+                b"basic", b"bearer", b"digest", b"negotiate", b"ntlm"
+            }:
                 continue
             finding = self._emit(
                 ctx,
