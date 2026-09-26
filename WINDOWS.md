@@ -1,13 +1,13 @@
 # Packet Inspector for Windows
 
-Version **0.1.5+win.1**, a Windows test release aligned with upstream Linux
-0.1.5 source commit `a69fdcf62502d602dd67c1016bb359c2687ec8a4`. This is
-a separate fork; it does not replace or remotely modify a Kali installation.
+Version **0.1.6+win.1** is a Windows test release aligned with upstream Linux
+0.1.6 detector changes. The Windows package is a separate fork; it does not
+replace or remotely modify a Kali installation.
 
 ## First run
 
 Download the attached deployment ZIP from the
-[Windows test release](https://github.com/KampaiDiscount/packet-inspector-windows/releases/tag/v0.1.5-win.1),
+[Windows test release](https://github.com/KampaiDiscount/packet-inspector-windows/releases/tag/v0.1.6-win.1),
 along with its `.zip.sha256` file. GitHub's automatic source archives and a
 Git checkout do not include the wheel expected by `SETUP.cmd`.
 
@@ -15,7 +15,7 @@ From the directory containing both downloaded files, verify the archive before
 extracting it:
 
 ```powershell
-$archive = 'Packet-Inspector-Windows-0.1.5-win1.zip'
+$archive = 'Packet-Inspector-Windows-0.1.6-win1.zip'
 $expected = (Get-Content -LiteralPath "$archive.sha256" -Raw).Trim().Split()[0]
 $actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
 if ($actual -ne $expected) { throw 'ZIP checksum mismatch; do not extract or run it.' }
@@ -126,7 +126,7 @@ any final verdict from being written; an absent final verdict is unverified.
 - A bounded ctypes Npcap adapter with nonblocking reads, correct Windows
   native layouts, explicit EOF/errors, and trusted DLL loading.
 - Independent dumpcap ring capture and the same flow-affine worker processes,
-  stream reassembly, detectors and durable JSONL writer as Linux 0.1.5.
+  stream reassembly, detectors and durable JSONL writer as Linux 0.1.6.
 - Windows loopback link-layer decoding, including IPv4/IPv6 header families.
 - Graceful shutdown of the owned raw-capture process in its own hidden console;
   forced termination is recorded as incomplete. No unrelated console is signaled.

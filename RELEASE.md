@@ -1,3 +1,43 @@
+# Packet Inspector for Windows 0.1.6+win.1
+
+Release candidate prepared 2026-09-26 for Git tag `v0.1.6-win.1`, aligned with
+the Linux 0.1.6 detector updates. **Test prerelease.** The deployment ZIP and
+checksum must be attached to the release; automatic source archives do not
+contain the offline wheel.
+
+Explicit HTTP Bearer credentials are detected even when short, within the
+bounded header limit. Ordinary preference cookies remain visible without being
+called confirmed sessions; recognized session-cookie names are candidates,
+with application validity untested. Compact JWTs require bounded base64url and
+JSON structure. Signed shapes have high confidence as observed token material;
+unsigned `alg:none` shapes with an empty signature are medium-confidence
+candidates. Signatures, issuers and usability are not verified, and five-part
+JWE is not classified as JWT.
+
+Clear HTTP/1 request and response bodies with Content-Length now emit a
+metadata-only, packet-attributed finding when their first bytes match PNG,
+JPEG, GIF, WebP, PDF or ZIP magic. Verified binary bodies are kept out of
+credential-text classification. The tracker does not retain file bodies; the
+separate raw PCAPNG ring remains subject to its configured retention. Chunked,
+close-delimited, compressed, encrypted and HTTP/2+ bodies are outside this
+file-signature coverage. See [COVERAGE.md](COVERAGE.md) for the bounded
+multipart and partial-response behavior.
+
+The native Windows regression suite passed with 695 tests and 28 subtests;
+9 platform/backend checks were skipped. A 12-packet Win11 PNG HTTP capture
+replayed with a complete verdict, zero reported drops and one high-confidence
+file-signature finding with complete packet provenance. A separate synthetic
+PNG upload/download replay found both file roles without treating text inside
+the image as a credential; its overall verdict remained incomplete because
+the existing generic HTTP-body parser marked one image body content type
+unsupported. Physical-adapter and sustained-load acceptance remain deployment
+checks. A candidate ZIP build passed its external SHA-256 and 91 internal
+manifest checks, contained one 0.1.6+win.1 wheel and source archive, and
+installed the wheel offline from the extracted package. See
+[WINDOWS-VALIDATION.md](WINDOWS-VALIDATION.md).
+
+---
+
 # Packet Inspector for Windows 0.1.5+win.1
 
 Release candidate prepared 2026-09-26 for Git tag `v0.1.5-win.1`. The shared-engine

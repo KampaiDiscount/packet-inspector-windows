@@ -17,7 +17,7 @@ def main():
     source = Path(__file__).resolve().parents[1]
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
-    label = 'Packet-Inspector-Windows-0.1.5-win1'
+    label = 'Packet-Inspector-Windows-0.1.6-win1'
     archive = output / f'{label}.zip'
     if archive.exists():
         raise ValueError('Refusing to overwrite an existing release archive')

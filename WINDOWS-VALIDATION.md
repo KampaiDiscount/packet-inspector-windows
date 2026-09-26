@@ -1,4 +1,40 @@
-# Windows release validation - 0.1.5+win.1
+# Windows release validation - 0.1.6+win.1
+
+Candidate checked on 2026-09-26 with 64-bit Python 3.12.14 and Npcap 1.88.
+The current isolated Windows source passed these checks:
+
+- **695 passed, 9 skipped, 28 subtests passed** in the complete native suite.
+  The skips require Linux/POSIX behavior rather than Windows Npcap.
+- The token regressions cover short explicit Bearer values, preference and
+  session-cookie classification, signed and unsigned JWT structure, malformed
+  and five-part non-JWT shapes, and a 5.3 KiB JWT split across four packets.
+- The file regressions cover PNG, JPEG, GIF, WebP, PDF and ZIP signatures in
+  HTTP/1 uploads and downloads, every two-packet split of a PNG request,
+  provenance, bounded metadata, filename sanitization, MIME disagreement,
+  first-part multipart and byte-zero partial responses. Unsupported framing
+  and compressed/HTTP/2 cases raise visible coverage counters.
+- Native Windows replay of a **12-packet Win11 PNG HTTP PCAPNG** produced one
+  high-confidence file-signature finding with complete packet provenance.
+  Capture and dispatch counted 12 packets each, with zero reported drops or
+  gaps and a complete verdict.
+- A separate **46-packet synthetic valid-PNG upload/download PCAP** produced
+  two file-signature findings and no credential finding from text embedded in
+  the image. Its verdict was incomplete because the existing generic HTTP
+  parser counted one image content type as unsupported; this does not erase
+  the two file-signature observations.
+- The candidate deployment ZIP's external SHA-256 and all **91 internal
+  manifest entries** matched. It held one 0.1.6+win.1 wheel and one source
+  archive. Setup from the extracted package installed that wheel offline and
+  the isolated CLI reported `packet-audit 0.1.6+win.1`.
+
+The 0.1.5+win.1 results below are historical, including its live-loopback
+and installed-launcher checks; those were not repeated for this candidate.
+Physical Ethernet/Wi-Fi, live Windows SMB/LDAP, sustained load and
+long-duration capture remain deployment-specific acceptance checks.
+
+---
+
+# Historical Windows release validation - 0.1.5+win.1
 
 Candidate checked on 2026-09-26 with 64-bit Python 3.12.14 and Npcap 1.88.
 The 0.1.5+win.1 source and extracted deployment ZIP passed these checks:

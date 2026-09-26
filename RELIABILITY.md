@@ -1,5 +1,16 @@
 # Reliability and acceptance gate
 
+## What 0.1.6 changes
+
+- Bounded HTTP/1 Content-Length file-signature observations include exact
+  packet provenance and metadata only. Verified binary bodies are excluded
+  from text-credential scanning; unsupported transfer framing raises visible
+  `http_transfer_*` coverage counters. A file finding does not establish that
+  the transfer completed or was accepted by an application.
+- Explicit short Bearer values and structurally valid compact JWT candidates
+  are retained. Generic cookies no longer assert a confirmed session role.
+  JWT signatures and application validity are not checked.
+
 ## What 0.1.5 changes
 
 - Validated SMB2 frames with a zero SessionId retain that value. A Type 3

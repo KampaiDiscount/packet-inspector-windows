@@ -453,6 +453,29 @@ def test_jwt_requires_bounded_json_structure_and_accepts_whitespace() -> None:
     assert len(by_type(standalone, "jwt")) == 1
 
 
+def test_large_whitespace_header_jwt_spanning_generic_stream_packets() -> None:
+    def encode(value: bytes) -> bytes:
+        return base64.urlsafe_b64encode(value).rstrip(b"=")
+
+    header = b' {"alg":"HS256","padding":"' + b"a" * 1400 + b'"}'
+    payload = b' {"sub":"synthetic-user","padding":"' + b"b" * 2500 + b'"}'
+    token = encode(header) + b"." + encode(payload) + b"." + encode(b"synthetic-signature-bytes")
+    assert 2048 < len(token) < 8192
+    wire = b"Observed: " + token + b"\n"
+    boundaries = (0, 2100, 4000, 5200, len(wire))
+    detector = SensitiveDetector("session")
+    findings = []
+    for index, (start, end) in enumerate(zip(boundaries, boundaries[1:]), start=1):
+        findings.extend(detector.process_stream(chunk(
+            wire[start:end], target_flow=flow(40000, 9000),
+            offset=start, packet_id=index,
+        )))
+    jwt = by_type(findings, "jwt")
+    assert len(jwt) == 1
+    assert jwt[0].material == token.decode("ascii")
+    assert jwt[0].packet_ids_complete
+
+
 def test_http_text_line_keeps_short_secret_with_http_context() -> None:
     body = b"login: synthetic-user\npassword: x\n"
     request = (

@@ -1,4 +1,4 @@
-# Protocol coverage: Packet Inspector 0.1.5
+# Protocol coverage: Packet Inspector for Windows
 
 Coverage describes wire formats, not a guarantee that every login is visible.
 The sensor needs the relevant traffic, both directions for correlation, and
@@ -13,6 +13,7 @@ extraction. An SMB login does not necessarily use NTLM.
 | Mail NTLM | Complete base64 NTLM/SPNEGO tokens in SMTP/POP3/IMAP lines on 25/587/110/143 | 16 KiB encoded token limit; not encrypted SMTP/IMAP/POP3 sessions. |
 | LDAP | BER simple bind credentials; embedded raw NTLM in SASL exchanges | Does not decode every SASL mechanism, signed/sealed application data, or LDAPS. Repeated binds are separately emitted. |
 | HTTP cleartext | Basic, form/query fields, typed JSON secrets, cookies, Bearer, Digest | HTTP/1 framing. See LOGIN_FIELDS.md. No deep HTTP/2, multipart, or compressed body decoding. |
+| HTTP file signatures | PNG, JPEG, GIF, WebP, PDF and ZIP magic at the start of clear HTTP/1 request/response bodies | Content-Length framing and a bounded prefix are required. This is a file-type observation, not proof that the transfer completed or the application accepted it. |
 | FTP / POP3 | USER/PASS correlation | Clear command channel only. |
 | SMTP | AUTH PLAIN and LOGIN, including multistep forms | No TLS or every SASL mechanism. |
 | IMAP | LOGIN, AUTHENTICATE PLAIN/LOGIN | Not a complete IMAP literal/extension implementation. |
@@ -30,6 +31,25 @@ AMQP/SASL, XMPP SASL, SOCKS5 username/password, and full Telnet handling are not
 implemented/qualified here. These are potential additions, not advertised
 coverage. Protocols on nonstandard ports need a dedicated test before relying
 on the port-gated detectors.
+
+HTTP file-signature findings record the observed type, request/response role,
+declared length, bounded MIME type and, when present, a sanitized basename.
+Their packet IDs point to the bytes carrying the magic signature. They do not
+store the file body. The existing detector tail still holds a bounded transient
+window, and the independently configured raw PCAPNG ring can retain the original
+body; this feature does not alter those policies. Once a binary signature is
+verified, general credential scanners do not interpret that framed file body
+as a login or token. This may also omit a real secret embedded inside a file.
+
+The transfer tracker supports clear HTTP/1 Content-Length bodies, including
+files larger than the detector tail because it inspects a prefix without
+buffering the whole body. Multipart inspection is limited to the first part's
+first 2 KiB. A 206 response is classified only when a valid Content-Range
+begins at byte zero and is explicitly marked partial. Chunked bodies,
+close-delimited/unframed bodies, compressed content, HTTP/2, HTTP/3, TLS and
+nonzero-range partial responses are not file-type qualified by this tracker;
+visible unsupported framing and prefix limits increment `http_transfer_*`
+coverage counters and make the replay/session verdict incomplete.
 
 The default capture filter admits IPv4/IPv6 and recognized outer VLAN tags
 (802.1Q, 802.1ad, 0x9100 and 0x9200) on Ethernet and Linux cooked links. The

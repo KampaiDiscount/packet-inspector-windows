@@ -4,15 +4,15 @@ Native Windows packet inspection for authorized network assessments, with
 Npcap capture, TCP stream reconstruction, sensitive-field detection, structured
 evidence exports, and a local dashboard.
 
-**Release: [0.1.5+win.1 — Windows test prerelease](https://github.com/KampaiDiscount/packet-inspector-windows/releases/tag/v0.1.5-win.1).**
-Aligned with the [Packet Inspector Linux 0.1.5 fixes](https://github.com/KampaiDiscount/packet-inspector).
+**Release: [0.1.6+win.1 — Windows test prerelease](https://github.com/KampaiDiscount/packet-inspector-windows/releases/tag/v0.1.6-win.1).**
+Aligned with the [Packet Inspector Linux 0.1.6 detector updates](https://github.com/KampaiDiscount/packet-inspector).
 The Windows package is named `packet-inspector-windows`; both `packet-inspector`
 and `packet-audit` remain available as command-line entry points.
 
 ## Download and start
 
-Download the **[deployment ZIP](https://github.com/KampaiDiscount/packet-inspector-windows/releases/download/v0.1.5-win.1/Packet-Inspector-Windows-0.1.5-win1.zip)**
-and its **[SHA-256 checksum](https://github.com/KampaiDiscount/packet-inspector-windows/releases/download/v0.1.5-win.1/Packet-Inspector-Windows-0.1.5-win1.zip.sha256)**.
+Download the **[deployment ZIP](https://github.com/KampaiDiscount/packet-inspector-windows/releases/download/v0.1.6-win.1/Packet-Inspector-Windows-0.1.6-win1.zip)**
+and its **[SHA-256 checksum](https://github.com/KampaiDiscount/packet-inspector-windows/releases/download/v0.1.6-win.1/Packet-Inspector-Windows-0.1.6-win1.zip.sha256)**.
 The deployment ZIP contains the Windows launchers, an offline-install Python
 wheel, source, documentation, and an internal checksum manifest. GitHub's
 automatic **Source code** archives and a Git clone do not contain that wheel.
@@ -40,6 +40,9 @@ Linux Bash/systemd instructions belong to the upstream Linux project.
   material, HTTP login fields, and secret candidates. See
   [COVERAGE.md](COVERAGE.md) and [LOGIN_FIELDS.md](LOGIN_FIELDS.md) for exact formats
   and limits.
+- Identifies PNG, JPEG, GIF, WebP, PDF and ZIP signatures at the start of clear
+  HTTP/1 request and response bodies, with packet provenance and metadata-only
+  findings.
 - Writes JSONL findings with endpoints, timestamps, stream context, and packet
   provenance; later authentication attempts remain separate observations.
 - Records capture loss, queue pressure, parser limitations, and shutdown state,
@@ -47,6 +50,15 @@ Linux Bash/systemd instructions belong to the upstream Linux project.
 - Maintains an independent rotating `dumpcap` PCAPNG ring for later verification.
 - Provides a read-only loopback dashboard and offline PCAP/PCAPNG replay through
   `REPLAY-PCAP.cmd`.
+
+File-signature findings report an observed body prefix, not a completed file
+transfer. The tracker requires Content-Length framing and inspects at most 12
+leading bytes for ordinary bodies or 2 KiB for the first multipart part. It
+stores no file body in the finding. Verified binary bodies are excluded from
+credential-text interpretation. Chunked, close-delimited, compressed, HTTP/2
+and encrypted bodies are not identified by this feature; observed limits are
+visible in `http_transfer_*` health counters. The independent raw PCAPNG ring
+retains traffic under its separate configuration.
 
 ## Evidence and local access
 

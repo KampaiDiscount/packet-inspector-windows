@@ -33,6 +33,7 @@ from uuid import uuid4
 
 from .models import Finding, FlowKey, ParsedPacket, ProvenanceSpan, StreamChunk
 from .http_forms import HTTPFramer, Message as HTTPMessage, field_role, form_fields, json_fields
+from .http_transfers import HTTPTransferTracker, transfer_candidate_in
 from .ntlm_wrappers import smb2_header_seen, smb2_session_for_token, unwrap_ntlm
 from .cleartext import scan_redis, scan_postgres, scan_postgres_authentication
 
@@ -281,6 +282,8 @@ class _FlowState:
     line_pending: dict[int, bool] = field(default_factory=dict)
     http_pending: dict[int, bool] = field(default_factory=dict)
     http_framers: dict[int, HTTPFramer] = field(default_factory=dict)
+    http_transfer_trackers: dict[int, HTTPTransferTracker] = field(default_factory=dict)
+    http2_transfer_seen: set[int] = field(default_factory=set)
     generic_pending: dict[int, bool] = field(default_factory=dict)
     last_timestamp_ns: int = 0
     last_activity_ns: int = 0
@@ -1471,7 +1474,7 @@ class SensitiveDetector:
         state.last_timestamp_ns = max(state.last_timestamp_ns, chunk.last_timestamp_ns)
         context = self._merge_stream(state, chunk, flow_id)
         try:
-            return self._scan(context, state, datagram=False)
+            return self._scan(context, state, datagram=False, new_bytes=len(chunk.data))
         finally:
             self._refresh_pending_auth_accounting(state)
             self._enforce_retained_cap(flow_id)
@@ -1662,10 +1665,67 @@ class SensitiveDetector:
             is_datagram=False,
         )
 
-    def _scan(self, ctx: _ScanContext, state: _FlowState, *, datagram: bool) -> list[Finding]:
+    def _scan(
+        self, ctx: _ScanContext, state: _FlowState, *, datagram: bool,
+        new_bytes: int = 0,
+    ) -> list[Finding]:
         findings: list[Finding] = []
         framed_http = False
         if not datagram and ctx.data and ctx.base_offset is not None:
+            if (
+                ctx.direction not in state.http2_transfer_seen
+                and b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n" in ctx.data[
+                    -min(len(ctx.data), max(64, new_bytes + 32)):
+                ]
+            ):
+                state.http2_transfer_seen.add(ctx.direction)
+                self._stats["http_transfer_http2_unsupported"] += 1
+            transfer_tracker = state.http_transfer_trackers.get(ctx.direction)
+            if transfer_tracker is None and transfer_candidate_in(ctx.data, new_bytes):
+                transfer_tracker = HTTPTransferTracker()
+                state.http_transfer_trackers[ctx.direction] = transfer_tracker
+            if transfer_tracker is not None:
+                for hit in transfer_tracker.scan(ctx.data, ctx.base_offset, self._stats):
+                    material: dict[str, Any] = {
+                        "http_role": hit.http_role,
+                        "file_type": hit.file_type,
+                        "declared_content_length": hit.declared_content_length,
+                    }
+                    if hit.content_type:
+                        material["declared_content_type"] = hit.content_type
+                    if hit.filename:
+                        material["filename"] = hit.filename
+                    limitations = [
+                        "The file signature was observed in an HTTP body; full transfer and application processing were not established."
+                    ]
+                    if hit.partial_response:
+                        limitations.append("This is a partial HTTP response beginning at byte zero, not proof of a complete file transfer.")
+                    expected_mime = {
+                        "png": "image/png", "jpeg": "image/jpeg", "gif": "image/gif",
+                        "webp": "image/webp", "pdf": "application/pdf", "zip": "application/zip",
+                    }[hit.file_type]
+                    if hit.content_type not in (None, expected_mime, "application/octet-stream"):
+                        limitations.append("The declared Content-Type differs from the observed file signature.")
+                    finding = self._emit(
+                        ctx, state, detector="http_file_signature",
+                        start=hit.start, end=hit.end,
+                        category="file_signature", protocol="http",
+                        material_type="http_file_signature", material=material,
+                        confidence="high", limitations=limitations,
+                    )
+                    if finding is not None:
+                        findings.append(finding)
+                if transfer_tracker.covers_body(
+                    ctx.base_offset, ctx.base_offset + len(ctx.data)
+                ):
+                    # Once a verified file body fills the entire scan window,
+                    # no other protocol parser should interpret its bytes as
+                    # live authentication traffic.
+                    self._stats["findings"] += len(findings)
+                    return findings
+                masked = transfer_tracker.masked_body(ctx.data, ctx.base_offset)
+                if masked is not ctx.data:
+                    ctx = replace(ctx, data=masked)
             framer = state.http_framers.setdefault(ctx.direction, HTTPFramer())
             messages = framer.scan(ctx.data, ctx.base_offset, self.overlap_bytes, self._stats)
             framed_http = framer.recognized
@@ -1706,7 +1766,7 @@ class SensitiveDetector:
             "_scan_ldap": min(self.overlap_bytes, 64 * 1024),
             "_scan_mssql": min(self.overlap_bytes, 64 * 1024),
             "_scan_kerberos": min(self.overlap_bytes, 64 * 1024),
-            "_scan_generic_secrets": min(self.overlap_bytes, 768),
+            "_scan_generic_secrets": min(self.overlap_bytes, _MAX_LINE + 128),
             "_scan_pem_private_keys": min(self.overlap_bytes, 66 * 1024),
             "_scan_cards": 64,
         }
@@ -1831,7 +1891,18 @@ class SensitiveDetector:
                 return True
             if _GENERIC_NAMED_GATE_RE.search(probe) is not None:
                 return True
-            if b"." in probe and _JWT_CANDIDATE_RE.search(probe) is not None:
+            # A compact JWT can span packets with its first dot far beyond the
+            # ordinary 512-byte gate lookback. Inspect only the current bounded
+            # text line, so dots in older Host headers do not trigger a scan.
+            jwt_start, _ = self._scanner_range(
+                ctx, state, scanner_name, _MAX_LINE + 128,
+            )
+            cursor = state.scan_cursors.get((ctx.direction, scanner_name), ctx.base_offset)
+            new_start = max(0, min(cursor, ctx.base_offset + len(ctx.data)) - ctx.base_offset)
+            previous_newline = ctx.data.rfind(b"\n", jwt_start, new_start)
+            jwt_start = max(jwt_start, previous_newline + 1)
+            if (ctx.data.count(b".", jwt_start) >= 2
+                    and _JWT_CANDIDATE_RE.search(ctx.data, jwt_start) is not None):
                 return True
             if self.sensitive_fields != _SENSITIVE_FIELDS:
                 return any(name.encode("utf-8", "ignore") in probe for name in self.sensitive_fields)

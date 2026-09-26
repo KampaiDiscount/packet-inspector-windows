@@ -1,4 +1,28 @@
-# Windows 0.1.5+win.1 candidate validation report
+# Windows 0.1.6+win.1 candidate validation report
+
+Checked 2026-09-26 on Windows 11 with 64-bit Python 3.12.14 and Npcap 1.88.
+The candidate includes the Linux 0.1.6 token-quality and HTTP file-signature
+changes in a separate Windows checkout. Only synthetic token values and an
+authorized Win11 PNG test transfer were used.
+
+| Check | Result |
+| --- | --- |
+| Full native suite | 695 passed, 9 skipped, 28 subtests passed |
+| Token classification | Short Bearer, preference/session-cookie distinction, signed/unsigned/malformed JWT and four-packet 5.3 KiB JWT regressions passed |
+| File-signature matrix | PNG, JPEG, GIF, WebP, PDF and ZIP request/response findings, split boundaries, partial/multipart limits and binary-body isolation passed |
+| Real Win11 PNG PCAPNG replay | 12 packets processed, one high-confidence PNG finding with complete packet provenance, zero reported drops/gaps, complete verdict |
+| Synthetic PNG upload/download replay | 46 packets, two PNG findings with complete provenance, no credential finding from image text; incomplete verdict from one existing unsupported HTTP body content-type counter |
+| Candidate ZIP and offline setup | External SHA-256 and 91 internal entries verified; one 0.1.6+win.1 wheel and one source archive; extracted setup installed wheel offline and CLI reported 0.1.6+win.1 |
+
+This confirms detection and classification for the tested clear HTTP/1 shapes,
+not arbitrary files, encrypted sessions, successful authentication or zero
+loss under live load. Installed live-capture launchers were not repeated for
+this candidate; physical adapter and sustained-load qualification remain
+deployment-specific.
+
+---
+
+# Historical Windows 0.1.5+win.1 candidate validation report
 
 Checked 2026-09-26 on Windows with 64-bit Python 3.12.14, Npcap 1.88 and
 the native Windows PowerShell 5.1 launcher. Validation used synthetic
