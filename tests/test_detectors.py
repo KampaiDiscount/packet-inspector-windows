@@ -1094,6 +1094,97 @@ def test_sip_digest_hashcat_and_generic_secret_patterns_and_card() -> None:
     assert "BEGIN PRIVATE KEY" in by_type(findings, "private_key")[0].material
 
 
+def test_http_byte_ranges_are_not_payment_card_candidates() -> None:
+    # These offsets deliberately form a Luhn-valid number when the hyphen is
+    # removed. A real card in another header must still be reported.
+    offset = b"4-111111111111111"
+    request = (
+        b"GET /download HTTP/1.1\r\nHost: lab.example\r\n"
+        + b"Range: bytes=" + offset + b"\r\n"
+        + b"X-Card: 4111111111111111\r\n\r\n"
+    )
+    detector = SensitiveDetector("session")
+    findings = detector.process_stream(chunk(request, packet_id=1))
+    cards = by_type(findings, "payment_card_candidate")
+    assert len(cards) == 1
+    assert cards[0].material["digits"] == "4111111111111111"
+    assert cards[0].stream_offset == request.index(b"X-Card: ") + len(b"X-Card: ")
+
+    response = (
+        b"HTTP/1.1 206 Partial Content\r\n"
+        + b"Content-Range: bytes " + offset + b"/111111111111112\r\n"
+        + b"Content-Length: 0\r\n\r\n"
+    )
+    findings = detector.process_stream(chunk(
+        response, direction=1, packet_id=2,
+    ))
+    assert not by_type(findings, "payment_card_candidate")
+
+
+def test_http_range_exclusion_does_not_hide_body_or_unframed_values() -> None:
+    body = (
+        b"Range: bytes=4-111111111111111\r\n"
+        b"Content-Range: bytes 4-111111111111111/111111111111112\r\n"
+    )
+    request = (
+        b"POST /notes HTTP/1.1\r\nHost: lab.example\r\n"
+        + b"Content-Type: text/plain\r\n"
+        + f"Content-Length: {len(body)}\r\n\r\n".encode()
+        + body
+    )
+    detector = SensitiveDetector("session")
+    findings = detector.process_stream(chunk(request, packet_id=1))
+    assert len(by_type(findings, "payment_card_candidate")) == 2
+
+    # A line with the same spelling outside a proven HTTP header block is
+    # still subject to the ordinary generic card scanner.
+    findings = detector.process_stream(chunk(
+        body, target_flow=flow(40001, 4242), packet_id=2,
+    ))
+    assert len(by_type(findings, "payment_card_candidate")) == 2
+
+
+def test_http_range_exclusion_only_covers_numeric_offset_spans() -> None:
+    # A card-shaped value elsewhere on the same line must survive even when
+    # the line starts with a valid byte-range prefix.
+    request = (
+        b"GET /download HTTP/1.1\r\n"
+        b"Range: bytes=4-111111111111111, 5-111111111111111; "
+        b"note=4111111111111111\r\n\r\n"
+    )
+    detector = SensitiveDetector("session")
+    findings = detector.process_stream(chunk(request))
+    cards = by_type(findings, "payment_card_candidate")
+    assert len(cards) == 1
+    assert cards[0].stream_offset == request.index(b"note=") + len(b"note=")
+
+
+def test_split_http_range_header_never_emits_partial_card() -> None:
+    request = (
+        b"GET /download HTTP/1.1\r\n"
+        b"Range: bytes=4-111111111111111\r\n\r\n"
+    )
+    split = request.index(b"111111111111111") + 7
+    detector = SensitiveDetector("session")
+    first = detector.process_stream(chunk(request[:split], packet_id=1))
+    second = detector.process_stream(chunk(
+        request[split:], offset=split, packet_id=2,
+    ))
+    assert not by_type(first + second, "payment_card_candidate")
+
+
+def test_response_start_line_after_binary_window_tail_is_range_header() -> None:
+    response = (
+        b"\x00" * 64
+        + b"HTTP/1.1 206 Partial Content\r\n"
+        + b"Content-Range: bytes 4-111111111111111/111111111111112\r\n"
+        + b"Content-Length: 0\r\n\r\n"
+    )
+    detector = SensitiveDetector("session")
+    findings = detector.process_stream(chunk(response, direction=1))
+    assert not by_type(findings, "payment_card_candidate")
+
+
 def test_split_pem_uses_long_scanner_only_while_pending() -> None:
     detector = SensitiveDetector("session")
     pem = (

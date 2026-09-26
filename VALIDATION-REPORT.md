@@ -1,4 +1,24 @@
-# Windows 0.1.6+win.2 candidate validation report
+# Windows 0.1.6+win.3 candidate validation report
+
+Checked 2026-09-26 on Windows 11 with 64-bit Python 3.12.14 and Npcap 1.88.
+
+| Check | Result |
+| --- | --- |
+| Full native suite | 700 passed, 9 expected platform skips, 28 subtests passed |
+| HTTP byte-range regression | Five focused tests passed: numeric `Range`/`Content-Range` offsets no longer become card candidates; card-shaped values elsewhere and split TCP input remain covered |
+| Candidate ZIP and offline setup | External SHA-256 and all 91 internal entries verified; one 0.1.6+win.3 wheel and source archive passed package checks; extracted offline setup loaded the bundled wheel |
+| Installed Windows replay | Separate 42-frame Win11-to-Linode PNG HTTP capture processed 42/42 frames, produced the expected two cookie and one PNG-signature findings, and ended complete with zero reported drops or parser errors |
+
+The historical Kali first-window replay on the Windows fork was interrupted
+before a valid final verdict, so it is not a Windows-package acceptance test.
+The 42-frame capture tests clear HTTP/1 file and cookie classification, not
+live Windows capture or native Win11 HTTP/LDAP/SMB authentication; that latter
+matrix was observed by the Linux sensor. No universal or sustained zero-loss
+claim follows from these bounded tests.
+
+---
+
+# Historical Windows 0.1.6+win.2 candidate validation report
 
 Checked 2026-09-26 on Windows 11 with 64-bit Python 3.12.14 and Npcap 1.88.
 The candidate includes the Linux 0.1.6 token-quality and HTTP file-signature

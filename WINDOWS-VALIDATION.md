@@ -1,4 +1,27 @@
-# Windows release validation - 0.1.6+win.2
+# Windows release validation - 0.1.6+win.3
+
+Checked on 2026-09-26 with Windows 11, 64-bit Python 3.12.14 and Npcap 1.88.
+The five HTTP byte-range regressions passed, and the complete native suite
+passed **700 tests, 9 expected platform skips and 28 subtests**. The classifier
+suppressed Luhn-valid numeric offsets in HTTP `Range` and `Content-Range`
+headers while retaining tested card-shaped values in other headers, bodies,
+and non-HTTP text, including split TCP input.
+
+The candidate 0.1.6+win.3 ZIP passed its external SHA-256 and all **91 internal
+manifest entries**. Its bundled wheel and source archive passed package
+metadata checks; the detector bytes matched the source, both archives and the
+installed wheel. Extracted offline setup installed 0.1.6+win.3. Its installed
+Windows replay of a separate 42-frame Win11-to-Linode PNG capture processed
+42/42 packets, reported the expected two cookie candidates and one PNG
+signature, and ended complete with zero reported drops or parser errors.
+That capture exercises HTTP file detection; the native Win11 HTTP/LDAP/SMB
+authentication matrix was captured by Kali and does not qualify a live Windows
+sensor. Physical-adapter capture, sustained load and every protocol/credential
+shape still require deployment-specific checks.
+
+---
+
+# Historical Windows release validation - 0.1.6+win.2
 
 Candidate checked on 2026-09-26 with 64-bit Python 3.12.14 and Npcap 1.88.
 The current isolated Windows source passed these checks:

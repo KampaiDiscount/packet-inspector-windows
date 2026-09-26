@@ -156,11 +156,22 @@ _PEM_PRIVATE_KEY_RE = re.compile(
     rb"-----BEGIN ([A-Z0-9 ]{0,40}PRIVATE KEY)-----[\s\S]{16,65536}?-----END \1-----"
 )
 _PAYMENT_CARD_RE = re.compile(rb"(?<!\d)(?:\d[ -]?){12,18}\d(?!\d)")
+_HTTP_RANGE_PREFIX_RE = re.compile(rb"(?i)^range[ \t]*:[ \t]*bytes[ \t]*=[ \t]*")
+_HTTP_CONTENT_RANGE_RE = re.compile(
+    rb"(?i)^content-range[ \t]*:[ \t]*bytes[ \t]+"
+    rb"([0-9]+-[0-9]+)/(?:([0-9]+)|\*)"
+)
+_HTTP_BYTE_RANGE_SPEC_RE = re.compile(rb"[0-9]*-[0-9]*")
 _HTTP_GATE_RE = re.compile(
     rb"(?i)(?:authorization|authenticate|cookie|set-cookie|\b(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|CONNECT|TRACE)\s|(?:password|passwd|pwd|pass|token|api[_-]?key|secret|session|sid)=)"
 )
 _HTTP_START_LINE_RE = re.compile(
     rb"(?m)^(?:(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|CONNECT|TRACE) [^\r\n ]{1,8192} HTTP/1\.[01]|HTTP/1\.[01] [1-5][0-9]{2}(?: [^\r\n]{0,256})?)\r?\n"
+)
+# Scanner windows may begin with the tail of an earlier body. The next HTTP
+# start line need not follow a newline in the bounded window.
+_HTTP_START_LINE_WITHIN_WINDOW_RE = re.compile(
+    rb"(?:(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|CONNECT|TRACE) [^\r\n ]{1,8192} HTTP/1\.[01]|HTTP/1\.[01] [1-5][0-9]{2}(?: [^\r\n]{0,256})?)\r?\n"
 )
 _HTTP_TEXT_FIELD_RE = re.compile(
     rb"(?im)^(login|logon|username|user|password|passwd|passcode)[ \t]*[:=][ \t]*([^\r\n&;]{1,4096})\r?$"
@@ -2632,7 +2643,9 @@ class SensitiveDetector:
             findings.extend(self._scan_generic_secrets(generic_ctx, state))
             findings.extend(self._scan_pem_private_keys(generic_ctx, state))
         if self.credit_card_scan:
-            findings.extend(self._scan_cards(generic_ctx, state))
+            findings.extend(self._scan_cards(
+                generic_ctx, state, http_header_end=message.header_end
+            ))
         return findings
 
     def _scan_http(self, ctx: _ScanContext, state: _FlowState) -> list[Finding]:
@@ -3726,7 +3739,73 @@ class SensitiveDetector:
             total += digit
         return total % 10 == 0
 
-    def _scan_cards(self, ctx: _ScanContext, state: _FlowState) -> list[Finding]:
+    @staticmethod
+    def _http_byte_range_offset(
+        data: bytes | bytearray, start: int, end: int,
+        http_header_end: int | None,
+    ) -> bool:
+        """Exclude card-shaped byte offsets only inside HTTP range headers."""
+
+        line_start = data.rfind(b"\n", 0, start) + 1
+        line_end = data.find(b"\n", end)
+        if line_end < 0:
+            line_end = len(data)
+        line = bytes(data[line_start:line_end]).rstrip(b"\r")
+        relative_start, relative_end = start - line_start, end - line_start
+        content_range = _HTTP_CONTENT_RANGE_RE.match(line)
+        if content_range is not None:
+            is_offset = any(
+                span_start <= relative_start < relative_end <= span_end
+                for span_start, span_end in (
+                    content_range.span(1), content_range.span(2)
+                )
+                if span_start >= 0
+            )
+        else:
+            range_prefix = _HTTP_RANGE_PREFIX_RE.match(line)
+            if range_prefix is None:
+                return False
+            is_offset = False
+            cursor = range_prefix.end()
+            while True:
+                spec = _HTTP_BYTE_RANGE_SPEC_RE.match(line, cursor)
+                if spec is None or spec.group() == b"-":
+                    break
+                if spec.start() <= relative_start < relative_end <= spec.end():
+                    is_offset = True
+                    break
+                cursor = spec.end()
+                while cursor < len(line) and line[cursor] in b" \t":
+                    cursor += 1
+                if cursor >= len(line) or line[cursor:cursor + 1] != b",":
+                    break
+                cursor += 1
+                while cursor < len(line) and line[cursor] in b" \t":
+                    cursor += 1
+
+        if not is_offset:
+            return False
+
+        if http_header_end is None:
+            first_header_start = None
+            for start_line in _HTTP_START_LINE_WITHIN_WINDOW_RE.finditer(data, 0, line_start):
+                delimiter = data.find(b"\r\n\r\n", start_line.end())
+                candidate_header_end = len(data) if delimiter < 0 else delimiter + 4
+                if start_line.end() <= line_start < candidate_header_end:
+                    first_header_start = start_line.end()
+                    http_header_end = candidate_header_end
+            if first_header_start is None:
+                return False
+        else:
+            first_header_start = data.find(b"\n") + 1
+            if first_header_start == 0:
+                return False
+        return first_header_start <= line_start < start < end <= line_end <= http_header_end
+
+    def _scan_cards(
+        self, ctx: _ScanContext, state: _FlowState, *,
+        http_header_end: int | None = None,
+    ) -> list[Finding]:
         findings: list[Finding] = []
         data = self._terminated_text_data(ctx)
         for match in _PAYMENT_CARD_RE.finditer(data):
@@ -3735,6 +3814,36 @@ class SensitiveDetector:
             raw = match.group(0)
             number = re.sub(rb"[ -]", b"", raw).decode("ascii")
             if not 13 <= len(number) <= 19 or len(set(number)) == 1 or not self._luhn(number):
+                continue
+            byte_range_offset = self._http_byte_range_offset(
+                data, match.start(), match.end(), http_header_end
+            )
+            if (
+                not byte_range_offset
+                and http_header_end is None
+                and ctx.base_offset is not None
+            ):
+                # The ordinary card scan retains only 64 preceding bytes.
+                # For a rare Luhn match inside a long HTTP header, inspect
+                # the already retained stream tail without lengthening the
+                # main packet scan.
+                direction = state.directions.get(ctx.direction)
+                if direction is not None:
+                    absolute_start = ctx.base_offset + match.start()
+                    absolute_end = ctx.base_offset + match.end()
+                    relative_start = absolute_start - direction.base_offset
+                    relative_end = absolute_end - direction.base_offset
+                    if 0 <= relative_start < relative_end <= len(direction.data):
+                        lookback_start = max(0, relative_start - 32768)
+                        lookback_end = min(len(direction.data), relative_end + _MAX_LINE)
+                        retained = direction.data[lookback_start:lookback_end]
+                        byte_range_offset = self._http_byte_range_offset(
+                            retained,
+                            relative_start - lookback_start,
+                            relative_end - lookback_start,
+                            None,
+                        )
+            if byte_range_offset:
                 continue
             finding = self._emit(
                 ctx,

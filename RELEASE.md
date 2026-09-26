@@ -1,4 +1,25 @@
-# Packet Inspector for Windows 0.1.6+win.2
+# Packet Inspector for Windows 0.1.6+win.3
+
+Release prepared 2026-09-26 for Git tag `v0.1.6-win.3`. **Test prerelease.**
+This revision ports the Linux 0.1.9 HTTP byte-range correction to the native
+Windows package. Luhn-valid numeric offsets in `Range` and `Content-Range`
+headers no longer become payment-card candidate findings; tested card-shaped
+values in other headers and bodies remain detectable. The historical Kali
+capture that exposed the error is retained unchanged. This Windows release
+does not claim encrypted-payload visibility, sustained zero-loss capture, or
+universal credential coverage.
+
+The native Windows suite passed 700 tests with 9 expected platform skips and
+28 subtests. The candidate deployment ZIP passed external and internal checksum
+checks, installed its wheel offline, and its installed replay processed all
+42 frames of a separate Win11 PNG HTTP capture with the three expected
+findings and a complete verdict. The native Win11 HTTP/LDAP/SMB test was
+observed by the Linux sensor, not a Windows sensor. See
+[WINDOWS-VALIDATION.md](WINDOWS-VALIDATION.md) for the measured boundaries.
+
+---
+
+# Historical Packet Inspector for Windows 0.1.6+win.2
 
 Release candidate prepared 2026-09-26 for Git tag `v0.1.6-win.2`, aligned with
 the Linux 0.1.6 detector updates. **Test prerelease.** The deployment ZIP and

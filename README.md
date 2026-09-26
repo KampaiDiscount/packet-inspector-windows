@@ -4,15 +4,15 @@ Native Windows packet inspection for authorized network assessments, with
 Npcap capture, TCP stream reconstruction, sensitive-field detection, structured
 evidence exports, and a local dashboard.
 
-**Release: [0.1.6+win.2 — Windows test prerelease](https://github.com/KampaiDiscount/packet-inspector-windows/releases/tag/v0.1.6-win.2).**
-Aligned with the [Packet Inspector Linux 0.1.6 detector updates](https://github.com/KampaiDiscount/packet-inspector).
+**Release: [0.1.6+win.3 — Windows test prerelease](https://github.com/KampaiDiscount/packet-inspector-windows/releases/tag/v0.1.6-win.3).**
+Includes the HTTP byte-range card-candidate correction from [Packet Inspector Linux 0.1.9](https://github.com/KampaiDiscount/packet-inspector/releases/tag/v0.1.9).
 The Windows package is named `packet-inspector-windows`; both `packet-inspector`
 and `packet-audit` remain available as command-line entry points.
 
 ## Download and start
 
-Download the **[deployment ZIP](https://github.com/KampaiDiscount/packet-inspector-windows/releases/download/v0.1.6-win.2/Packet-Inspector-Windows-0.1.6-win2.zip)**
-and its **[SHA-256 checksum](https://github.com/KampaiDiscount/packet-inspector-windows/releases/download/v0.1.6-win.2/Packet-Inspector-Windows-0.1.6-win2.zip.sha256)**.
+Download the **[deployment ZIP](https://github.com/KampaiDiscount/packet-inspector-windows/releases/download/v0.1.6-win.3/Packet-Inspector-Windows-0.1.6-win3.zip)**
+and its **[SHA-256 checksum](https://github.com/KampaiDiscount/packet-inspector-windows/releases/download/v0.1.6-win.3/Packet-Inspector-Windows-0.1.6-win3.zip.sha256)**.
 The deployment ZIP contains the Windows launchers, an offline-install Python
 wheel, source, documentation, and an internal checksum manifest. GitHub's
 automatic **Source code** archives and a Git clone do not contain that wheel.
